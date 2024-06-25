@@ -446,14 +446,3 @@ std::wstring Trim(const std::wstring& str)
     size_t last = str.find_last_not_of(L' ');
     return str.substr(first, last - first + 1);
 }
-
-// function to validate that a string ends with .dll
-bool HasDllExtension(const std::wstring& fileName)
-{
-    std::wstring extension = L".dll";
-    if (fileName.length() >= extension.length())
-    {
-        return (0 == fileName.compare(fileName.length() - extension.length(), extension.length(), extension));
-    }
-    return false;
-}

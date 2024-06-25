@@ -20,6 +20,8 @@ struct LaunchConfig
     bool IsUnsafe = false;
     bool Console = false;
     std::vector<std::wstring> InjectedFiles;
+    std::vector<std::wstring> InjectedConfigurations;
+    std::wstring GameVersion;
 };
 
 // function to validate the presence of necessary injector files
@@ -27,7 +29,7 @@ bool InjectedFilesPresent(const std::wstring& folderPath, const std::vector<std:
 {
     if (GetFileAttributes(folderPath.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
-        MessageBox(NULL, (L"Injector mod folder not found. Try again, or reacquire it from the mod package: " + folderPath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, (L"Failed to find the Injector mod folder. Try again, or reacquire it from the mod package: " + folderPath).c_str(), L"Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -37,7 +39,23 @@ bool InjectedFilesPresent(const std::wstring& folderPath, const std::vector<std:
 
         if (GetFileAttributes(filePath.c_str()) == INVALID_FILE_ATTRIBUTES)
         {
-            MessageBox(NULL, (L"Injected file required by the mod was not found. Try again, or reacquire it from the mod package: " + fileName).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            MessageBox(NULL, (L"Failed to find a specific injected file required by the mod. Try again, or reacquire it from the mod package: " + fileName).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return false;
+        }
+    }
+    return true;
+}
+
+// function to validate the presence of configuration files for specific injections
+bool InjectedConfigurationsPresent(const std::wstring& launcherName, const std::vector<std::wstring>& injectedConfigurations)
+{
+    for (const auto& ext : injectedConfigurations)
+    {
+        std::wstring filePath = launcherName + L"." + ext;
+
+        if (GetFileAttributes(filePath.c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            MessageBox(NULL, (L"Failed to find a specific injection configuration file required by the mod. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
             return false;
         }
     }
@@ -67,7 +85,7 @@ LaunchConfig ReadLaunchConfig()
     LaunchConfig config;
     std::wstring line;
     std::set<std::wstring> requiredKeys = {
-    L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles"
+        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -214,9 +232,14 @@ LaunchConfig ReadLaunchConfig()
                     {
                         token = value.substr(startPos, endPos - startPos);
                         token = Trim(token);
-                        if (!HasDllExtension(token))
+                        if (token.find(L".dll") == std::wstring::npos)
                         {
-                            MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension, with each entry separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
+                            MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension.", L"Error", MB_OK | MB_ICONERROR);
+                            exit(1);
+                        }
+                        if (value[endPos + 1] != L' ')
+                        {
+                            MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each entry must be separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
                             exit(1);
                         }
                         config.InjectedFiles.push_back(token);
@@ -224,9 +247,9 @@ LaunchConfig ReadLaunchConfig()
                     }
                     token = value.substr(startPos);
                     token = Trim(token);
-                    if (!HasDllExtension(token))
+                    if (token.find(L".dll") == std::wstring::npos)
                     {
-                        MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension, with each entry separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
+                        MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension.", L"Error", MB_OK | MB_ICONERROR);
                         exit(1);
                     }
                     config.InjectedFiles.push_back(token);
@@ -237,9 +260,54 @@ LaunchConfig ReadLaunchConfig()
                 config.InjectedFiles.push_back(value);
             }
         }
+        else if (key == L"InjectedConfigurations")
+        {
+            if (config.Injector)
+            {
+                if (!value.empty())
+                {
+                    std::wistringstream ss(value);
+                    std::wstring token;
+                    size_t startPos = 0, endPos;
+                    while ((endPos = value.find(L", ", startPos)) != std::wstring::npos)
+                    {
+                        token = value.substr(startPos, endPos - startPos);
+                        token = Trim(token);
+                        if (token.find(L'.') == std::wstring::npos)
+                        {
+                            MessageBox(NULL, L"Invalid formatting for the [InjectedConfigurations] field of the launch configuration file. Each entry must be a valid file extension for injection configuration file types used by the mod.", L"Error", MB_OK | MB_ICONERROR);
+                            exit(1);
+                        }
+                        if (value[endPos + 1] != L' ')
+                        {
+                            MessageBox(NULL, L"Invalid formatting for the [InjectedConfigurations] field of the launch configuration file. Each entry must be separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
+                            exit(1);
+                        }
+                        config.InjectedConfigurations.push_back(token);
+                        startPos = endPos + 2;
+                    }
+                    token = value.substr(startPos);
+                    token = Trim(token);
+                    if (token.find(L'.') == std::wstring::npos)
+                    {
+                        MessageBox(NULL, L"Invalid formatting for the [InjectedConfigurations] field of the launch configuration file. Each entry must be a valid file extension for injection configuration file types used by the mod.", L"Error", MB_OK | MB_ICONERROR);
+                        exit(1);
+                    }
+                    config.InjectedConfigurations.push_back(token);
+                }
+            }
+            else
+            {
+                config.InjectedConfigurations.push_back(value);
+            }
+        }
         else if (key == L"FirstTimeLaunchMessage")
         {
             config.FirstTimeLaunchMessage = value;
+        }
+        else if (key == L"GameVersion")
+        {
+            config.GameVersion = value;
         }
         else
         {
@@ -289,6 +357,7 @@ void WriteLaunchConfig(const LaunchConfig& config)
 
     configFile << L"IsRetribution=" << (config.IsRetribution ? L"true" : L"false") << L"\n";
     configFile << L"IsSteam=" << (config.IsSteam ? L"true" : L"false") << L"\n";
+    configFile << L"GameVersion=" << config.GameVersion << L"\n";
     configFile << L"IsDXVK=" << (config.IsDXVK ? L"true" : L"false") << L"\n";
     configFile << L"LaunchParams=" << config.LaunchParams << L"\n";
     configFile << L"BitmapWidth=" << config.BitmapWidth << L"\n";
@@ -300,6 +369,16 @@ void WriteLaunchConfig(const LaunchConfig& config)
     {
         configFile << config.InjectedFiles[i];
         if (i < config.InjectedFiles.size() - 1)
+        {
+            configFile << L", ";
+        }
+    }
+    configFile << L"\n";
+    configFile << L"InjectedConfigurations=";
+    for (size_t i = 0; i < config.InjectedConfigurations.size(); ++i)
+    {
+        configFile << config.InjectedConfigurations[i];
+        if (i < config.InjectedConfigurations.size() - 1)
         {
             configFile << L", ";
         }
@@ -547,7 +626,7 @@ bool ValidateUCSFiles(const std::wstring& rootDir, const LaunchConfig& config)
 
     if (hFind == INVALID_HANDLE_VALUE)
     {
-        MessageBox(NULL, L"Failed to open any locale directories. Verify your game cache and reacquire the necessary files from the mod package.", L"Error", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, L"Failed to find or open any locale directories. Verify your game cache and reacquire the necessary files from the mod package.", L"Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -671,7 +750,8 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
                         break;
                 }
             }
-        } while (FindNextFile(hFind, &findFileData) != 0);
+        }
+        while (FindNextFile(hFind, &findFileData) != 0);
         FindClose(hFind);
     }
 
@@ -738,6 +818,7 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
     return true;
 }
 
+// main function
 int main()
 {
     // create a named mutex for the launcher
@@ -785,13 +866,41 @@ int main()
     // read launch parameters from the .launchconfig file
     LaunchConfig config = ReadLaunchConfig();
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Attempting to read the configuration file.", L"Debug", MB_OK | MB_ICONINFORMATION);
         MessageBox(NULL, (L"Launcher name: " + launcherName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
         MessageBox(NULL, (L"Bitmap file name: " + bitmapFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
         MessageBox(NULL, (L"Module file name: " + moduleFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
         MessageBox(NULL, (L"Config file name: " + configFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
         MessageBox(NULL, (L"Mod name: " + modName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
+    }
+
+    // check if DOW2.exe is already running
+    if (IsProcessRunning(APP_NAME))
+    {
+        MessageBox(NULL, L"DOW2.exe is already running. Please close it before launching again.", L"Error", MB_OK | MB_ICONERROR);
+        return 1;
+    }
+
+    // display the bitmap
+    HWND hwndBitmap = ShowBitmap(hInstance, bitmapFileName, config.BitmapWidth, config.BitmapHeight);
+
+    // start the global timeout timer
+    DWORD64 startTime = GetTickCount64();
+
+    // check the global timeout
+    if (GetTickCount64() - startTime > TIMEOUT_PROCESS)
+    {
+        if (!config.IsUnsafe)
+        {
+            MessageBox(NULL, L"Launcher process timed out before all operations could complete.", L"Error", MB_OK | MB_ICONERROR);
+            if (hwndBitmap)
+            {
+                DestroyWindow(hwndBitmap);
+            }
+            return 1;
+        }
     }
 
     // check for console and bitmap
@@ -810,7 +919,8 @@ int main()
     }
 
     // redirect stdout to the console
-    if (consoleShown) {
+    if (consoleShown) 
+    {
         FILE* stream;
         _wfreopen_s(&stream, L"CONOUT$", L"w", stdout);
         _wfreopen_s(&stream, L"CONOUT$", L"w", stderr);
@@ -833,7 +943,7 @@ int main()
     // check if DOW2.exe exists in the same directory as the launcher
     if (GetFileAttributes(APP_NAME) == INVALID_FILE_ATTRIBUTES)
     {
-        MessageBox(NULL, L"Failed to find or open DOW2.exe. You have installed the mod into the wrong directory, or your game is missing or corrupt. Install the mod into the correct directory, or try again.", L"Error", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, L"Failed to find DOW2.exe. You have installed the mod into the wrong directory, or your game is missing or corrupt. Install the mod into the correct directory, or try again.", L"Error", MB_OK | MB_ICONERROR);
         return 1;
     }
 
@@ -846,21 +956,28 @@ int main()
     // check if the .module file exists in the same directory
     if (GetFileAttributes(moduleFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
-        MessageBox(NULL, (L"Failed to find or open the mod's " + moduleFileName + L" module file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-        return 1;
+        if (!config.IsUnsafe)
+        {
+            MessageBox(NULL, (L"Failed to find the mod's " + moduleFileName + L" module file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return 1;
+        }
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Found module file.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
     if (!CheckModuleFile(moduleFileName, config))
     {
-        // error message and exit are handled within the CheckModuleFile function
-        return 1;
+        if (!config.IsUnsafe)
+        {
+            return 1;
+        }
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Verified module contents.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -868,17 +985,21 @@ int main()
 
     if (config.FirstTimeLaunchCheck)
     {
-        MessageBox(NULL, config.FirstTimeLaunchMessage.c_str(), L"First Launch", MB_OK | MB_ICONINFORMATION);
-        if (config.IsDXVK)
+        if (!config.IsUnsafe)
         {
-            MessageBox(NULL, L"Beware that DXVK is required for this mod, meaning that the game will use Vulkan instead of DirectX. Some hardware configurations do not support Vulkan, so if your game is inexplicably failing to launch, or you receive any errors regarding your graphical configuration, you may remove the d3d9.dll and dxvk.conf files associated with DXVK, but this will hinder your gameplay experience.", L"Information", MB_OK | MB_ICONINFORMATION);
-        }
+            MessageBox(NULL, config.FirstTimeLaunchMessage.c_str(), L"First Launch", MB_OK | MB_ICONINFORMATION);
+            if (config.IsDXVK)
+            {
+                MessageBox(NULL, L"Beware that DXVK is required for this mod, meaning that the game will use Vulkan instead of DirectX. Some hardware configurations do not support Vulkan, so if your game is inexplicably failing to launch, or you receive any errors regarding your graphical configuration, you may remove the d3d9.dll and dxvk.conf files associated with DXVK, but this will hinder your gameplay experience.", L"Information", MB_OK | MB_ICONINFORMATION);
+            }
 
-        config.FirstTimeLaunchCheck = false;
-        WriteLaunchConfig(config);
+            config.FirstTimeLaunchCheck = false;
+            WriteLaunchConfig(config);
+        }
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"First time launch checked.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -890,7 +1011,7 @@ int main()
             // check if the .config file exists in the same directory
             if (GetFileAttributes(configFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
             {
-                MessageBox(NULL, (L"Failed to find or open the mod's " + configFileName + L" injector config file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+                MessageBox(NULL, (L"Failed to find the mod's " + configFileName + L" injector config file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
                 return 1;
             }
 
@@ -912,6 +1033,15 @@ int main()
                 MessageBox(NULL, L"Verified injected files.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
 
+            if (!InjectedConfigurationsPresent(modName, config.InjectedConfigurations))
+            {
+                return 1; // error message is handled in InjectedConfigurationsPresent
+            }
+
+            if (config.VerboseDebug && config.Injector) {
+                MessageBox(NULL, L"Verified injected configurations.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
             if (GetFileAttributes(config.InjectorFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
             {
                 std::wstring binFileName = config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
@@ -923,24 +1053,50 @@ int main()
             }
             else
             {
+                // create the event for synchronization
+                HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL); // manual-reset event
+                if (hEvent == NULL)
+                {
+                    return 1;
+                }
+
                 // start the binary processing thread to check and possibly replace the injector file
                 HANDLE hThread = CreateThread(NULL, 0, InjectorBinaryProcessingThread, &config, 0, NULL);
                 if (hThread == NULL)
                 {
-                    if (!config.IsUnsafe)
-                    {
-                        MessageBox(NULL, L"Failed to create the injector binary processing thread.", L"Error", MB_OK | MB_ICONERROR);
-                        return 1;
-                    }
+                    CloseHandle(hEvent);
+                    return 1;
                 }
 
-                WaitForSingleObject(hThread, INFINITE);
+                HANDLE handles[] = { hThread, hEvent };
+                DWORD result = WaitForMultipleObjects(2, handles, FALSE, TIMEOUT_PROCESS);
+
+                if (result == WAIT_TIMEOUT)
+                {
+                    MessageBox(NULL, L"Injector processing or replacement timed out before it could complete.", L"Error", MB_OK | MB_ICONERROR);
+                    SetEvent(hEvent); // signal the event to exit the thread
+                    WaitForSingleObject(hThread, INFINITE); // wait for the thread to exit gracefully
+                    CloseHandle(hEvent);
+                    CloseHandle(hThread);
+                    return 1;
+                }
+
+                DWORD threadExitCode;
+                if (!GetExitCodeThread(hThread, &threadExitCode) || threadExitCode != 0)
+                {
+                    CloseHandle(hEvent);
+                    CloseHandle(hThread);
+                    return 1;
+                }
+
+                CloseHandle(hEvent);
                 CloseHandle(hThread);
             }
         }
     }
 
-    if (config.VerboseDebug && config.Injector) {
+    if (config.VerboseDebug && config.Injector) 
+    {
         MessageBox(NULL, L"Verified injector.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -967,7 +1123,8 @@ int main()
         }
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Verified GPU.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -976,10 +1133,14 @@ int main()
     // call the UCS file validation function
     if (!ValidateUCSFiles(rootDir, config))
     {
-        return 1;
+        if (!config.IsUnsafe)
+        {
+            return 1;
+        }
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Verified UCS files.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -1024,7 +1185,28 @@ int main()
         }
     }
 
-    if (config.VerboseDebug) {
+    // check GameVersion against DOW2.exe file version
+    if (!config.GameVersion.empty()) 
+    {
+        if (!config.IsUnsafe)
+        {
+            std::map<std::wstring, std::wstring> versionStrings = GetFileVersionStrings(APP_NAME, config.VerboseDebug);
+            if (versionStrings[L"FileVersion"] != config.GameVersion) {
+                MessageBox(NULL, (L"File version of DOW2.exe does not match the supported version of the game. Your gameplay experience may be altered, or the mod will not work. Expected: " + config.GameVersion + L", Found: " + versionStrings[L"FileVersion"]).c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+                if (config.VerboseDebug) 
+                {
+                    std::wstring debugMessage = L"DOW2.exe version info:\n";
+                    for (const auto& pair : versionStrings) {
+                        debugMessage += pair.first + L": " + pair.second + L"\n";
+                    }
+                    MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
+                }
+            }
+        }
+    }
+
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"Verified version.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -1115,7 +1297,8 @@ int main()
         }
     }
 
-    if (config.VerboseDebug && config.IsDXVK) {
+    if (config.VerboseDebug && config.IsDXVK) 
+    {
         MessageBox(NULL, L"Verified DXVK.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
@@ -1124,95 +1307,12 @@ int main()
         CONSOLE_MESSAGE(L"DXVK Check.");
     }
 
-    if (config.VerboseDebug) {
+    if (config.VerboseDebug) 
+    {
         MessageBox(NULL, L"All file checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
         
     CONSOLE_MESSAGE(L"ALL CHECKS COMPLETE.");
-
-    // check if DOW2.exe is already running
-    if (IsProcessRunning(APP_NAME))
-    {
-        MessageBox(NULL, L"DOW2.exe is already running. Please close it before launching again.", L"Error", MB_OK | MB_ICONERROR);
-        return 1;
-    }
-
-    // display the bitmap
-    HWND hwndBitmap = ShowBitmap(hInstance, bitmapFileName, config.BitmapWidth, config.BitmapHeight);
-
-    // start the global timeout timer
-    DWORD64 startTime = GetTickCount64();
-
-    // binary processing with timeout
-    HANDLE hEvent = NULL;
-    HANDLE hThread = NULL;
-
-    if (config.Injector)
-    {
-        hEvent = CreateEvent(NULL, TRUE, FALSE, NULL); // manual-reset event
-        if (hEvent == NULL)
-        {
-            if (hwndBitmap)
-            {
-                DestroyWindow(hwndBitmap);
-            }
-            return 1;
-        }
-
-        hThread = CreateThread(NULL, 0, InjectorBinaryProcessingThread, &config, 0, NULL);
-        if (hThread == NULL)
-        {
-            CloseHandle(hEvent);
-            if (hwndBitmap)
-            {
-                DestroyWindow(hwndBitmap);
-            }
-            return 1;
-        }
-
-        HANDLE handles[] = { hThread, hEvent };
-        DWORD result = WaitForMultipleObjects(2, handles, FALSE, TIMEOUT_PROCESS);
-
-        if (result == WAIT_TIMEOUT)
-        {
-            MessageBox(NULL, L"Injector processing or replacement timed out before it could complete.", L"Error", MB_OK | MB_ICONERROR);
-            SetEvent(hEvent); // signal the event to exit the thread
-            WaitForSingleObject(hThread, INFINITE); // wait for the thread to exit gracefully
-            CloseHandle(hEvent);
-            CloseHandle(hThread);
-            if (hwndBitmap)
-            {
-                DestroyWindow(hwndBitmap);
-            }
-            return 1;
-        }
-
-        DWORD threadExitCode;
-        if (!GetExitCodeThread(hThread, &threadExitCode) || threadExitCode != 0)
-        {
-            CloseHandle(hEvent);
-            CloseHandle(hThread);
-            if (hwndBitmap)
-            {
-                DestroyWindow(hwndBitmap);
-            }
-            return 1;
-        }
-
-        CloseHandle(hEvent);
-        CloseHandle(hThread);
-    }
-
-    // check the global timeout
-    if (GetTickCount64() - startTime > TIMEOUT_PROCESS)
-    {
-        MessageBox(NULL, L"Launcher process timed out before all operations could complete.", L"Error", MB_OK | MB_ICONERROR);
-        if (hwndBitmap)
-        {
-            DestroyWindow(hwndBitmap);
-        }
-        return 1;
-    }
 
     // launch the game
     std::wstring commandLine = std::wstring(APP_NAME) + L" -modname " + modName + L" " + config.LaunchParams;
