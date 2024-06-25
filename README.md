@@ -4,7 +4,7 @@
 
 **SETUP INSTRUCTIONS**
 
-- Put the .exe and .launchconfig files into your Dawn of War II - Retribution directory.
+- Put the .exe and .launchconfig files into your Dawn of War II game directory.
 
 - Change the names of both files to match the name of your mod's .module file.
 
@@ -12,7 +12,7 @@
 
 - Set the [IsSteam] field of the .launchconfig file to false if your mod is for the GOG distribution of the game, or true if your mod is for the Steam distribution of the game.
 
-- Set the [IsRetribution] field field of the .launchconfig file to false if your mod is for Dawn of War II - Chaos Rising, or true if your mod is for Dawn of War II - Retribution.
+- Set the [IsRetribution] field of the .launchconfig file to false if your mod is for Dawn of War II - Chaos Rising, or true if your mod is for Dawn of War II - Retribution.
 
 - Set the [IsDXVK] field of the .launchconfig file to false if your mod does not require DXVK, or true if your mod requires DXVK. If true, ensure that you package the d3d9.dll and dxvk.conf files with your mod, and that you duplicate the d3d9.dll file, then change the name of the duplicate file's extension to .bin. This duplicate .bin file is used as a baseline for replacing a non-DXVK d3d9.dll file.
 
@@ -24,12 +24,18 @@
 
 - If you wish to receive detailed debug messages, set the [VerboseDebug] field of the .launchconfig file to true.
 
+- If you wish to skip errors or warnings about [IsSteam], [IsRetribution], [IsDXVK], [Injector], and GPU checks, set the [IsUnsafe] field of the .launchconfig file to true.
+
+- If you wish to see the console window regardless of whether a bitmap exists or not, set the [Console] field of the .launchconfig file to true.
+
 
 **FEATURES**
 
 - Failsafe for DOW2.exe; if DOW2.exe is not found, or if DOW2.exe is already running, a warning is displayed and the entire process is aborted.
 
 - Failsafe for the launcher configuration file; if the .launchconfig file is not found, a warning is displayed and the entire process is aborted.
+
+- Failsafe for multiple instances of the launcher; if another instance of the launcher is already running at the time that the user decides to execute the launcher, a warning is displayed and the entire process is aborted.
 
 - Failsafe for the misspelled or missing variables in the .launchconfig file; if the .launchconfig file has misspelled or missing variables, a warning is displayed and the entire process is aborted.
 
@@ -45,7 +51,13 @@
 
 - Failsafe for closing the injector through the close button on the console window; if the user tries to close the injector before it finishes its operations, a warning is displayed, advising against doing so.
 
-- Failsafe for invalid launch parameter formatting; if the [LaunchParams] field is formatted incorrectly, a warning is displayed and the entire process is aborted.
+- Failsafe for invalid launch configuration file formatting; if any of the fields are formatted incorrectly, a warning is displayed and the entire process is aborted.
+
+- Failsafe for invalid .ucs file formatting; if any .ucs files have incorrect formatting or line order, a warning is displayed and the entire process is aborted. Additionally, if a .ucs file is not UTF-16 LE, an attempt will be made to convert the file to UTF-16 LE. If this attempt fails, a warning is displayed and the entire process is aborted.
+
+- Failsafe for localization folders; if there are no files under the Locale folder, a warning is displayed and the entire process is aborted.
+
+- Failsafe for missing GPU; if the launcher detects no GPU, integrated or dedicated, a warning is displayed, but the process continues; likewise if [IsDXVK] is set to true, and the launcher detects no Vulkan capable GPU, a warning is displayed, but the process continues.
 
 - Automatically launches the game with the -module launch parameter that corresponds to the name of the launcher.
 
