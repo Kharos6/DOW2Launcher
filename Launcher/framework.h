@@ -1,8 +1,10 @@
 #pragma once
 #pragma comment(lib, "Version.lib")
+#pragma comment(lib, "d3d9.lib")
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "vulkan-1.lib")
 
 #define WIN32_LEAN_AND_MEAN
-#define APP_NAME L"DOW2.exe"
 #define TIMEOUT_PROCESS 60000 // absolute timeout for the entire process
 #define CONSOLE_MESSAGE(msg) \
     if (consoleShown) { \
@@ -22,6 +24,12 @@
 #include <map>
 #include <set>
 #include <cstring>
+#include <codecvt>
+#include <locale>
+#include <unordered_map>
+#include <d3d9.h>
+#include <dxgi.h>
+#include "vulkan/vulkan.h"
 
 // helper function to convert a wide string to a narrow string
 std::string WStringToString(const std::wstring& wstr)
@@ -339,4 +347,61 @@ bool ValidateIntegerField(const std::wstring& value)
 {
     std::wregex intRegex(L"^-?\\d+$");
     return std::regex_match(value, intRegex);
+}
+
+// function to check if a dedicated gpu is present
+bool HasGPU()
+{
+    IDXGIFactory* pFactory = nullptr;
+    if (FAILED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory)))
+    {
+        return false;
+    }
+
+    IDXGIAdapter* pAdapter = nullptr;
+    bool hasGPU = false;
+
+    for (UINT i = 0; pFactory->EnumAdapters(i, &pAdapter) != DXGI_ERROR_NOT_FOUND; ++i)
+    {
+        DXGI_ADAPTER_DESC desc;
+        pAdapter->GetDesc(&desc);
+
+        // check for any GPU, whether it's dedicated or integrated
+        if (desc.DedicatedVideoMemory > 0 || desc.SharedSystemMemory > 0)
+        {
+            hasGPU = true;
+            pAdapter->Release();
+            break;
+        }
+        pAdapter->Release();
+    }
+
+    pFactory->Release();
+    return hasGPU;
+}
+
+bool HasVulkanSupport()
+{
+    VkInstance instance;
+    VkApplicationInfo appInfo = {};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "VulkanCheck";
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.pEngineName = "No Engine";
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pApplicationInfo = &appInfo;
+
+    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
+        return false;
+    }
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    vkDestroyInstance(instance, nullptr);
+
+    return deviceCount > 0;
 }
