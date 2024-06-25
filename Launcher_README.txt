@@ -18,13 +18,13 @@
 
 - Optionally, create a .bmp file with your desired artwork and resolution, and change its name to match the name of your mod's .module file, then change the [BitmapWidth] and [BitmapHeight] fields of the .launchconfig file to match its resolution.
 
-- If using an injector, set the [Injector] field of the .launchconfig file to true, and set the [InjectorFileName] field of the .launchconfig file to match the name of your injector file, including its file extension. After that, create an MD5 checksum for it, and insert the value into the [ExpectedInjectorFileMD5Checksum] field of the .launchconfig file. Finally, duplicate your current injector .dll file, and change the duplicate file's extension to .bin. This duplicate .bin file is used as a baseline for replacing a faulty or non-injector version of the injector file.
+- If using an injector, set the [Injector] field of the .launchconfig file to true, and set the [InjectorFileName] field of the .launchconfig file to match the name of your injector file, including its file extension; this field can remain blank if you are not using an injector. Populate the [InjectedFiles] field of the .launchconfig file with the full names, including the DLL extension, of the files contained within the folder declared in the mod-folder field of the injector's .config file; this field can remain blank if you are not injecting anything. After that, create an MD5 checksum for it, and insert the value into the [ExpectedInjectorFileMD5Checksum] field of the .launchconfig file; this field can remain blank if you are not using an injector. Finally, duplicate your current injector .dll file, and change the duplicate file's extension to .bin. This duplicate .bin file is used as a baseline for replacing a faulty or non-injector version of the injector file.
 
 - Set the [FirstTimeLaunchMessage] field of the .launchconfig file to your desired welcoming message for people who are launching the mod for the first time. The [FirstTimeLaunchCheck] field is automatically switched to false after the user has executed the launcher for the first time.
 
 - If you wish to receive detailed debug messages, set the [VerboseDebug] field of the .launchconfig file to true.
 
-- If you wish to skip errors or warnings about [IsSteam], [IsRetribution], [IsDXVK], [Injector], and GPU checks, set the [IsUnsafe] field of the .launchconfig file to true.
+- If you wish to skip errors or warnings about [IsSteam], [IsRetribution], [IsDXVK], [Injector], [InjectedFiles], and GPU checks, set the [IsUnsafe] field of the .launchconfig file to true.
 
 - If you wish to see the console window regardless of whether a bitmap exists or not, set the [Console] field of the .launchconfig file to true.
 
@@ -42,6 +42,8 @@
 - Failsafe for the injector file; if [Injector] is set to true, and the injector file doesn't exist or match the provided checksum, it replaces the injector file with the binary data of the .bin file, and then launches the game. If the replacement fails, or the injector file is not found, a warning is displayed and the entire process is aborted.
 
 - Failsafe for the injector configuration file; if [Injector] is set to true, and the injector's .config file is missing, a warning is displayed and the entire process is aborted.
+
+- Failsafe for the injector mod folder; if [Injector] is set to true, and the injector's designated mod folder is missing the .dll files listed in the [InjectedFiles] field of the .launchconfig file, a warning is displayed and the entire process is aborted.
 
 - Failsafe for the .module file; if the .module file of the same name as the launcher is missing, a warning is displayed and the entire process is aborted.
 

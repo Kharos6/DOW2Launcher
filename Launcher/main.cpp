@@ -19,31 +19,28 @@ struct LaunchConfig
     std::wstring FirstTimeLaunchMessage;
     bool IsUnsafe = false;
     bool Console = false;
+    std::vector<std::wstring> InjectedFiles;
 };
 
-// simple function to copy raw data from source to destination
-bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePath)
+// function to validate the presence of necessary injector files
+bool InjectedFilesPresent(const std::wstring& folderPath, const std::vector<std::wstring>& injectedFiles)
 {
-    std::ifstream srcFile(srcFilePath, std::ios::binary);
-    if (!srcFile.is_open())
+    if (GetFileAttributes(folderPath.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
-        MessageBox(NULL, (L"Failed to find or open the source file: " + srcFilePath + L". Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, (L"Injector mod folder not found. Try again, or reacquire it from the mod package: " + folderPath).c_str(), L"Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
-    std::ofstream dstFile(dstFilePath, std::ios::binary);
-    if (!dstFile.is_open())
+    for (const auto& fileName : injectedFiles)
     {
-        MessageBox(NULL, (L"Failed to find or open the destination file: " + dstFilePath + L". Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-        srcFile.close();
-        return false;
+        std::wstring filePath = folderPath + L"\\" + fileName;
+
+        if (GetFileAttributes(filePath.c_str()) == INVALID_FILE_ATTRIBUTES)
+        {
+            MessageBox(NULL, (L"Injected file required by the mod was not found. Try again, or reacquire it from the mod package: " + fileName).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return false;
+        }
     }
-
-    dstFile << srcFile.rdbuf();
-
-    srcFile.close();
-    dstFile.close();
-
     return true;
 }
 
@@ -70,7 +67,7 @@ LaunchConfig ReadLaunchConfig()
     LaunchConfig config;
     std::wstring line;
     std::set<std::wstring> requiredKeys = {
-    L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console"
+    L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -97,7 +94,10 @@ LaunchConfig ReadLaunchConfig()
         }
         else if (key == L"ExpectedInjectorFileMD5Checksum")
         {
-            config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
+            if (config.Injector)
+            {
+                config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
+            }
         }
         else if (key == L"BitmapWidth")
         {
@@ -119,11 +119,14 @@ LaunchConfig ReadLaunchConfig()
         }
         else if (key == L"InjectorFileName")
         {
-            config.InjectorFileName = value;
-            if (!ValidateFileName(config.InjectorFileName))
+            if (config.Injector)
             {
-                MessageBox(NULL, L"Invalid formatting for the [InjectorFileName] field of the launch configuration file. The full file name must include the file extension.", L"Error", MB_OK | MB_ICONERROR);
-                exit(1);
+                config.InjectorFileName = value;
+                if (!ValidateFileName(config.InjectorFileName))
+                {
+                    MessageBox(NULL, L"Invalid formatting for the [InjectorFileName] field of the launch configuration file. The full file name must include the file extension.", L"Error", MB_OK | MB_ICONERROR);
+                    exit(1);
+                }
             }
         }
         else if (key == L"LaunchParams")
@@ -198,6 +201,42 @@ LaunchConfig ReadLaunchConfig()
             }
             config.Console = (value == L"true");
         }
+        else if (key == L"InjectedFiles")
+        {
+            if (config.Injector)
+            {
+                if (!value.empty())
+                {
+                    std::wistringstream ss(value);
+                    std::wstring token;
+                    size_t startPos = 0, endPos;
+                    while ((endPos = value.find(L", ", startPos)) != std::wstring::npos)
+                    {
+                        token = value.substr(startPos, endPos - startPos);
+                        token = Trim(token);
+                        if (!HasDllExtension(token))
+                        {
+                            MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension, with each entry separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
+                            exit(1);
+                        }
+                        config.InjectedFiles.push_back(token);
+                        startPos = endPos + 2;
+                    }
+                    token = value.substr(startPos);
+                    token = Trim(token);
+                    if (!HasDllExtension(token))
+                    {
+                        MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension, with each entry separated by a comma and a space.", L"Error", MB_OK | MB_ICONERROR);
+                        exit(1);
+                    }
+                    config.InjectedFiles.push_back(token);
+                }
+            }
+            else
+            {
+                config.InjectedFiles.push_back(value);
+            }
+        }
         else if (key == L"FirstTimeLaunchMessage")
         {
             config.FirstTimeLaunchMessage = value;
@@ -217,7 +256,7 @@ LaunchConfig ReadLaunchConfig()
         std::wstring errorMsg = L"Missing or misspelled configuration keys: ";
         for (const auto& key : requiredKeys)
         {
-            errorMsg += key + L" (line " + std::to_wstring(lineNumbers[key]) + L"), ";
+            errorMsg += key;
         }
         errorMsg.pop_back();
         errorMsg.pop_back();
@@ -256,6 +295,16 @@ void WriteLaunchConfig(const LaunchConfig& config)
     configFile << L"BitmapHeight=" << config.BitmapHeight << L"\n";
     configFile << L"Injector=" << (config.Injector ? L"true" : L"false") << L"\n";
     configFile << L"InjectorFileName=" << config.InjectorFileName << L"\n";
+    configFile << L"InjectedFiles=";
+    for (size_t i = 0; i < config.InjectedFiles.size(); ++i)
+    {
+        configFile << config.InjectedFiles[i];
+        if (i < config.InjectedFiles.size() - 1)
+        {
+            configFile << L", ";
+        }
+    }
+    configFile << L"\n";
     configFile << L"ExpectedInjectorFileMD5Checksum=" << std::wstring(config.ExpectedInjectorFileMD5Checksum.begin(), config.ExpectedInjectorFileMD5Checksum.end()) << L"\n";
     configFile << L"FirstTimeLaunchCheck=" << (config.FirstTimeLaunchCheck ? L"true" : L"false") << L"\n";
     configFile << L"FirstTimeLaunchMessage=" << config.FirstTimeLaunchMessage << L"\n";
@@ -266,8 +315,39 @@ void WriteLaunchConfig(const LaunchConfig& config)
     configFile.close();
 }
 
+// function to read the injector mod folder
+std::wstring ReadModFolderFromConfig(const std::wstring& configFilePath)
+{
+    std::wifstream configFile(configFilePath);
+    if (!configFile.is_open())
+    {
+        MessageBox(NULL, (L"Failed to find or open the mod's " + configFilePath + L" injector config file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+        exit(1);
+    }
+
+    std::wstring line;
+    std::wstring modFolder;
+    while (std::getline(configFile, line))
+    {
+        size_t pos = line.find(L":");
+        if (pos == std::wstring::npos) continue;
+
+        std::wstring key = line.substr(0, pos);
+        std::wstring value = line.substr(pos + 1);
+
+        if (key == L"mod-folder")
+        {
+            modFolder = Trim(value);
+            break;
+        }
+    }
+    configFile.close();
+
+    return modFolder;
+}
+
 // function to handle the binary processing with a timeout
-DWORD WINAPI BinaryProcessingThread(LPVOID lpParam)
+DWORD WINAPI InjectorBinaryProcessingThread(LPVOID lpParam)
 {
     LaunchConfig* config = (LaunchConfig*)lpParam;
     std::string actualChecksum;
@@ -354,7 +434,7 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
         std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);
         if (!outFile.is_open())
         {
-            MessageBox(NULL, (L"Failed to open UCS file for writing. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            MessageBox(NULL, (L"Failed to find or open UCS file for writing. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
             return false;
         }
 
@@ -371,7 +451,7 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
     ucsFile.open(filePath, std::ios::binary);
     if (!ucsFile.is_open())
     {
-        MessageBox(NULL, (L"Failed to open faulty UCS file to confirm attempted conversion to UTF-16 LE. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+        MessageBox(NULL, (L"Failed to find or open faulty UCS file to confirm attempted conversion to UTF-16 LE. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -380,7 +460,7 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
 
     if (!(newFileContent.size() > 2 && (unsigned char)newFileContent[0] == 0xFF && (unsigned char)newFileContent[1] == 0xFE))
     {
-        std::wstring errorMessage = L"Failed to verify faulty UCS file as UTF-16 LE after attempted conversion: " + filePath;
+        std::wstring errorMessage = L"UCS file could not be verified as UTF-16 LE after attempted conversion: " + filePath;
         MessageBox(NULL, errorMessage.c_str(), L"Error", MB_OK | MB_ICONERROR);
         exit(EXIT_FAILURE);
     }
@@ -807,6 +887,31 @@ int main()
     {
         if (!config.IsUnsafe)
         {
+            // check if the .config file exists in the same directory
+            if (GetFileAttributes(configFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, (L"Failed to find or open the mod's " + configFileName + L" injector config file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            if (config.VerboseDebug && config.Injector) {
+                MessageBox(NULL, L"Verified injector config.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            // read mod-folder from the .config file
+            std::wstring configFilePath = rootDir + L"\\" + configFileName;
+            std::wstring modFolder = ReadModFolderFromConfig(configFilePath);
+
+            std::wstring modFolderPath = rootDir + L"\\" + modFolder;
+            if (!InjectedFilesPresent(modFolderPath, config.InjectedFiles))
+            {
+                return 1; // error message is handled in InjectedFilesPresent
+            }
+
+            if (config.VerboseDebug && config.Injector) {
+                MessageBox(NULL, L"Verified injected files.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
             if (GetFileAttributes(config.InjectorFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
             {
                 std::wstring binFileName = config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
@@ -819,12 +924,12 @@ int main()
             else
             {
                 // start the binary processing thread to check and possibly replace the injector file
-                HANDLE hThread = CreateThread(NULL, 0, BinaryProcessingThread, &config, 0, NULL);
+                HANDLE hThread = CreateThread(NULL, 0, InjectorBinaryProcessingThread, &config, 0, NULL);
                 if (hThread == NULL)
                 {
                     if (!config.IsUnsafe)
                     {
-                        MessageBox(NULL, L"Failed to create the binary processing thread.", L"Error", MB_OK | MB_ICONERROR);
+                        MessageBox(NULL, L"Failed to create the injector binary processing thread.", L"Error", MB_OK | MB_ICONERROR);
                         return 1;
                     }
                 }
@@ -839,15 +944,9 @@ int main()
         MessageBox(NULL, L"Verified injector.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
-    // check if the .config file exists in the same directory
-    if (GetFileAttributes(configFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
+    if (config.Injector)
     {
-        MessageBox(NULL, (L"Failed to find or open the mod's " + configFileName + L" injector config file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-        return 1;
-    }
-
-    if (config.VerboseDebug && config.Injector) {
-        MessageBox(NULL, L"Verified injector config.", L"Debug", MB_OK | MB_ICONINFORMATION);
+        CONSOLE_MESSAGE(L"Injector Check.");
     }
 
     // check for a vulkan-capable GPU if DXVK is true
@@ -1020,10 +1119,15 @@ int main()
         MessageBox(NULL, L"Verified DXVK.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
+    if (config.IsDXVK)
+    {
+        CONSOLE_MESSAGE(L"DXVK Check.");
+    }
+
     if (config.VerboseDebug) {
         MessageBox(NULL, L"All file checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
-
+        
     CONSOLE_MESSAGE(L"ALL CHECKS COMPLETE.");
 
     // check if DOW2.exe is already running
@@ -1055,7 +1159,7 @@ int main()
             return 1;
         }
 
-        hThread = CreateThread(NULL, 0, BinaryProcessingThread, &config, 0, NULL);
+        hThread = CreateThread(NULL, 0, InjectorBinaryProcessingThread, &config, 0, NULL);
         if (hThread == NULL)
         {
             CloseHandle(hEvent);

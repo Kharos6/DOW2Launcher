@@ -3,12 +3,12 @@
   "WorkspaceRootPath": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
-      "RelativeMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|solutionrelative:Launcher\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\framework.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
       "RelativeMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|solutionrelative:Launcher\\framework.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
+      "RelativeMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|solutionrelative:Launcher\\main.cpp||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{CCCB5FF7-0A60-4052-9778-7186CECCD306}|Launcher\\Launcher.vcxproj|G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\resource.h||{D0E1A5C6-B359-4E41-9B60-3365922C2A22}",
@@ -30,7 +30,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 4,
+          "SelectedChildIndex": 3,
           "Children": [
             {
               "$type": "Document",
@@ -69,26 +69,26 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
+              "DocumentIndex": 0,
               "Title": "framework.h",
               "DocumentMoniker": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\framework.h",
               "RelativeDocumentMoniker": "Launcher\\framework.h",
               "ToolTip": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\framework.h",
               "RelativeToolTip": "Launcher\\framework.h",
-              "ViewState": "AQIAAG4BAAAAAAAAAAAAAAYAAAAbAAAA",
+              "ViewState": "AQIAACoAAAAAAAAAAAAAAMEBAAAwAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
               "WhenOpened": "2024-06-21T22:14:20.691Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 0,
+              "DocumentIndex": 1,
               "Title": "main.cpp",
               "DocumentMoniker": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\main.cpp",
               "RelativeDocumentMoniker": "Launcher\\main.cpp",
               "ToolTip": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\main.cpp",
               "RelativeToolTip": "Launcher\\main.cpp",
-              "ViewState": "AQIAAJ4DAAAAAAAAAAAAAKYDAAAWAAAA",
+              "ViewState": "AQIAALAEAAAAAAAAAAAAAEMAAAAWAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2024-06-18T05:20:41.896Z",
               "EditorCaption": ""

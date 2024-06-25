@@ -1,3 +1,5 @@
+// header for storing generic functions and operations not specific to the game
+
 #pragma once
 #pragma comment(lib, "Version.lib")
 #pragma comment(lib, "d3d9.lib")
@@ -29,6 +31,8 @@
 #include <unordered_map>
 #include <d3d9.h>
 #include <dxgi.h>
+#include <algorithm>
+#include <cctype>
 #include "vulkan/vulkan.h"
 
 // helper function to convert a wide string to a narrow string
@@ -76,6 +80,32 @@ HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bit
     UpdateWindow(hwnd);
 
     return hwnd;
+}
+
+// function to copy raw data from source to destination
+bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePath)
+{
+    std::ifstream srcFile(srcFilePath, std::ios::binary);
+    if (!srcFile.is_open())
+    {
+        MessageBox(NULL, (L"Failed to find or open the source file for read operation: " + srcFilePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    std::ofstream dstFile(dstFilePath, std::ios::binary);
+    if (!dstFile.is_open())
+    {
+        MessageBox(NULL, (L"Failed to find or open the destination file for write operation: " + dstFilePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+        srcFile.close();
+        return false;
+    }
+
+    dstFile << srcFile.rdbuf();
+
+    srcFile.close();
+    dstFile.close();
+
+    return true;
 }
 
 // function to calculate the MD5 checksum of a file
@@ -380,6 +410,7 @@ bool HasGPU()
     return hasGPU;
 }
 
+// function to check for GPU vulkan support
 bool HasVulkanSupport()
 {
     VkInstance instance;
@@ -404,4 +435,25 @@ bool HasVulkanSupport()
     vkDestroyInstance(instance, nullptr);
 
     return deviceCount > 0;
+}
+
+// helper function to trim whitespace from a string
+std::wstring Trim(const std::wstring& str)
+{
+    size_t first = str.find_first_not_of(L' ');
+    if (first == std::wstring::npos)
+        return L"";
+    size_t last = str.find_last_not_of(L' ');
+    return str.substr(first, last - first + 1);
+}
+
+// function to validate that a string ends with .dll
+bool HasDllExtension(const std::wstring& fileName)
+{
+    std::wstring extension = L".dll";
+    if (fileName.length() >= extension.length())
+    {
+        return (0 == fileName.compare(fileName.length() - extension.length(), extension.length(), extension));
+    }
+    return false;
 }
