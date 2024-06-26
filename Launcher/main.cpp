@@ -22,6 +22,7 @@ struct LaunchConfig
     std::vector<std::wstring> InjectedFiles;
     std::vector<std::wstring> InjectedConfigurations;
     std::wstring GameVersion;
+    bool LAAPatch = false;
 };
 
 // function to validate the presence of necessary injector files
@@ -85,7 +86,7 @@ LaunchConfig ReadLaunchConfig()
     LaunchConfig config;
     std::wstring line;
     std::set<std::wstring> requiredKeys = {
-        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion"
+        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -309,6 +310,15 @@ LaunchConfig ReadLaunchConfig()
         {
             config.GameVersion = value;
         }
+        else if (key == L"LAAPatch")
+        {
+            if (!ValidateBooleanField(value))
+            {
+                MessageBox(NULL, L"Invalid formatting for the [4GBPatch] field of the launch configuration file. It must be true or false.", L"Error", MB_OK | MB_ICONERROR);
+                exit(1);
+            }
+            config.LAAPatch = (value == L"true");
+        }
         else
         {
             MessageBox(NULL, (L"Unexpected configuration key: " + key + L" on line " + std::to_wstring(lineNumber) + L". Reacquire the launch configuration file from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
@@ -359,6 +369,7 @@ void WriteLaunchConfig(const LaunchConfig& config)
     configFile << L"IsSteam=" << (config.IsSteam ? L"true" : L"false") << L"\n";
     configFile << L"GameVersion=" << config.GameVersion << L"\n";
     configFile << L"IsDXVK=" << (config.IsDXVK ? L"true" : L"false") << L"\n";
+    configFile << L"LAAPatch=" << (config.LAAPatch ? L"true" : L"false") << L"\n";
     configFile << L"LaunchParams=" << config.LaunchParams << L"\n";
     configFile << L"BitmapWidth=" << config.BitmapWidth << L"\n";
     configFile << L"BitmapHeight=" << config.BitmapHeight << L"\n";
@@ -1000,7 +1011,7 @@ int main()
 
     if (config.VerboseDebug) 
     {
-        MessageBox(NULL, L"First time launch checked.", L"Debug", MB_OK | MB_ICONINFORMATION);
+        MessageBox(NULL, L"Verified first time launch.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
 
     // check for injector
@@ -1102,7 +1113,35 @@ int main()
 
     if (config.Injector)
     {
-        CONSOLE_MESSAGE(L"Injector Check.");
+        CONSOLE_MESSAGE(L"Injector check.");
+    }
+
+    if (config.LAAPatch && Is32BitApplication(APP_NAME))
+    {
+        if (!config.IsUnsafe)
+        {
+            if (!IsLargeAddressAware(APP_NAME))
+            {
+                int msgboxID = MessageBox(NULL, L"DOW2.exe is not large address aware, meaning it won't allocate more than 2gb of address space, which is not enough for this mod. Would you like to apply the large address aware patch?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                if (msgboxID == IDYES)
+                {
+                    if (!ApplyLargeAddressAwarePatch(APP_NAME))
+                    {
+                        MessageBox(NULL, L"Failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
+                    }
+                }
+            }
+        }
+    }
+
+    if (config.VerboseDebug && config.LAAPatch)
+    {
+        MessageBox(NULL, L"Verified large address aware.", L"Debug", MB_OK | MB_ICONINFORMATION);
+    }
+
+    if (config.LAAPatch)
+    {
+        CONSOLE_MESSAGE(L"Large address aware check.");
     }
 
     // check for a vulkan-capable GPU if DXVK is true
@@ -1185,7 +1224,7 @@ int main()
         }
     }
 
-    // check GameVersion against DOW2.exe file version
+    // check GameVersion field entry against DOW2.exe file version
     if (!config.GameVersion.empty()) 
     {
         if (!config.IsUnsafe)
@@ -1230,7 +1269,7 @@ int main()
 
             if (d3d9Missing)
             {
-                int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch the mod, you will crash in large scenarios, and experience a loss in performance. Would you like to recover DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch the mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
                 if (msgboxID == IDYES)
                 {
                     CopyFileRaw(L"d3d9.bin", L"d3d9.dll");
@@ -1256,11 +1295,15 @@ int main()
                 }
 
                 if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] != L"DXVK") {
-                    CopyFileRaw(L"d3d9.bin", L"d3d9.dll");
+                    int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                    if (msgboxID == IDYES)
+                    {
+                        CopyFileRaw(L"d3d9.bin", L"d3d9.dll");
+                    }
                 }
                 else if (dxvkConfMissing)
                 {
-                    int msgboxID = MessageBox(NULL, L"The dxvk.conf file for DXVK is missing. Would you like to recover it?", L"Information", MB_YESNO | MB_ICONQUESTION);
+                    int msgboxID = MessageBox(NULL, L"The dxvk.conf file for DXVK is missing. Would you like to acquire it?", L"Warning", MB_YESNO | MB_ICONWARNING);
                     if (msgboxID == IDYES)
                     {
                         std::ofstream dxvkConfFile("dxvk.conf");
@@ -1287,7 +1330,7 @@ int main()
             }
 
             if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK") {
-                int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Information", MB_YESNO | MB_ICONQUESTION);
+                int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
                 if (msgboxID == IDYES)
                 {
                     DeleteFile(L"d3d9.dll");
@@ -1304,12 +1347,12 @@ int main()
 
     if (config.IsDXVK)
     {
-        CONSOLE_MESSAGE(L"DXVK Check.");
+        CONSOLE_MESSAGE(L"DXVK check.");
     }
 
     if (config.VerboseDebug) 
     {
-        MessageBox(NULL, L"All file checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
+        MessageBox(NULL, L"All checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
     }
         
     CONSOLE_MESSAGE(L"ALL CHECKS COMPLETE.");

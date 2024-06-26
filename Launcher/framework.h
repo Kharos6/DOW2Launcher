@@ -14,6 +14,7 @@
     }
 
 #include <windows.h>
+#include <winnt.h>
 #include <tlhelp32.h>
 #include <thread>
 #include <wincrypt.h>
@@ -445,4 +446,87 @@ std::wstring Trim(const std::wstring& str)
         return L"";
     size_t last = str.find_last_not_of(L' ');
     return str.substr(first, last - first + 1);
+}
+
+// function to query "bitness"
+bool Is32BitApplication(const std::wstring& filePath)
+{
+    DWORD binaryType;
+    if (GetBinaryTypeW(filePath.c_str(), &binaryType))
+    {
+        return binaryType == SCS_32BIT_BINARY;
+    }
+    return false;
+}
+
+// function to query 4gb patch
+bool IsLargeAddressAware(const std::wstring& filePath)
+{
+    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+    HANDLE hFileMapping = CreateFileMappingW(hFile, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!hFileMapping)
+    {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    LPVOID lpFileBase = MapViewOfFile(hFileMapping, FILE_MAP_READ, 0, 0, 0);
+    if (!lpFileBase)
+    {
+        CloseHandle(hFileMapping);
+        CloseHandle(hFile);
+        return false;
+    }
+
+    PIMAGE_DOS_HEADER pDOSHeader = (PIMAGE_DOS_HEADER)lpFileBase;
+    PIMAGE_NT_HEADERS pNTHeaders = (PIMAGE_NT_HEADERS)((DWORD_PTR)lpFileBase + pDOSHeader->e_lfanew);
+
+    bool result = (pNTHeaders->FileHeader.Characteristics & IMAGE_FILE_LARGE_ADDRESS_AWARE) != 0;
+
+    UnmapViewOfFile(lpFileBase);
+    CloseHandle(hFileMapping);
+    CloseHandle(hFile);
+
+    return result;
+}
+
+// function to apply the 4gbpatch
+bool ApplyLargeAddressAwarePatch(const std::wstring& filePath)
+{
+    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+    HANDLE hFileMapping = CreateFileMappingW(hFile, NULL, PAGE_READWRITE, 0, 0, NULL);
+    if (!hFileMapping)
+    {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    LPVOID lpFileBase = MapViewOfFile(hFileMapping, FILE_MAP_WRITE, 0, 0, 0);
+    if (!lpFileBase)
+    {
+        CloseHandle(hFileMapping);
+        CloseHandle(hFile);
+        return false;
+    }
+
+    PIMAGE_DOS_HEADER pDOSHeader = (PIMAGE_DOS_HEADER)lpFileBase;
+    PIMAGE_NT_HEADERS pNTHeaders = (PIMAGE_NT_HEADERS)((DWORD_PTR)lpFileBase + pDOSHeader->e_lfanew);
+
+    pNTHeaders->FileHeader.Characteristics |= IMAGE_FILE_LARGE_ADDRESS_AWARE;
+
+    UnmapViewOfFile(lpFileBase);
+    CloseHandle(hFileMapping);
+    CloseHandle(hFile);
+
+    return true;
 }

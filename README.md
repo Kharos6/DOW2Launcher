@@ -16,7 +16,9 @@
 
 - Optionally, insert the file version of the DOW2.exe that the mod is created for into the [GameVersion] field of the .launchconfig file. Leaving the field blank will ignore the version check.
 
-- Set the [IsDXVK] field of the .launchconfig file to false if your mod does not require DXVK, or true if your mod requires DXVK. If true, ensure that you package the d3d9.dll and dxvk.conf files with your mod, and that you duplicate the d3d9.dll file, then change the name of the duplicate file's extension to .bin. This duplicate .bin file is used as a baseline for replacing a non-DXVK d3d9.dll file.
+- Optionally, set the [IsDXVK] field of the .launchconfig file to true if your mod requires DXVK. If true, ensure that you package the d3d9.dll and dxvk.conf files with your mod, and that you duplicate the d3d9.dll file, then change the name of the duplicate file's extension to .bin. This duplicate .bin file is used as a baseline for replacing a non-DXVK d3d9.dll file.
+
+- Optionally, set the [LAAPatch] field of the .launchconfig file to true if your mod requires DOW2.exe to be large address aware.
 
 - Optionally, create a .bmp file with your desired artwork and resolution, and change its name to match the name of your mod's .module file, then change the [BitmapWidth] and [BitmapHeight] fields of the .launchconfig file to match its resolution.
 
@@ -51,7 +53,9 @@
 
 - Failsafe for the .module file; if the .module file of the same name as the launcher is missing, a warning is displayed and the entire process is aborted.
 
-- Failsafe for the DXVK; if the [IsDXVK] field of the .launchconfig file is set to true, and the dxvk.conf or d3d9.dll files are missing, or the d3d9.dll file is not from DXVK, a warning is displayed, and the user can either recover DXVK or continue with the launch. If the [IsDXVK] field of the .launchconfig file is set to false, and the d3d9.dll file specific to DXVK is present, a warning is displayed, and the user can either delete DXVK or continue with the launch.
+- Failsafe for DXVK; if the [IsDXVK] field of the .launchconfig file is set to true, and the dxvk.conf or d3d9.dll files are missing, or the d3d9.dll file is not from DXVK, a warning is displayed, and the user can either acquire DXVK or continue with the launch. If the [IsDXVK] field of the .launchconfig file is set to false, and the d3d9.dll file specific to DXVK is present, a warning is displayed, and the user can either delete DXVK or continue with the launch.
+
+- Failsafe for large address aware; if the [LAAPatch] field of the .launchconfig file is set to true, a warning is displayed, and the user can either set DOW2.exe to be large address aware, or continue with the launch.
 
 - Failsafe for .sga archives loaded by the .module file; if any of the .sga archives required by the mod are missing, a warning is displayed and the entire process is aborted. Locale .sga files are checked based on which language folders exist, and whether they contain a DOW2.ucs file. If only one language folder exists, and it contains a DOW2.ucs file, then it verifies that the corresponding .sga archives exist for that language. If multiple language folders exist, and more than one language folder contains a DOW2.ucs file, we ignore checking the existence of .sga archives under the entire Locale folder, as this is typical of dev builds that may contain multiple languages, and we should not cause errors for those.
 
