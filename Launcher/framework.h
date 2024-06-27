@@ -41,6 +41,7 @@
 #include <boost/process.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
 #include <boost/interprocess/exceptions.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/locale.hpp>
 #include <boost/dll/runtime_symbol_info.hpp>
@@ -270,7 +271,8 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     void* verData = nullptr;
     UINT verDataLen = 0;
 
-    struct LANGANDCODEPAGE {
+    struct LANGANDCODEPAGE 
+    {
         WORD wLanguage;
         WORD wCodePage;
     } *lpTranslate = nullptr;
@@ -467,6 +469,59 @@ bool ApplyLargeAddressAwarePatch(const std::wstring& filePath)
 //
 
 
+
+// function to get the current process name
+std::string get_current_process_name() 
+{
+    std::string executablePath = boost::dll::program_location().string();
+    std::vector<std::string> pathComponents;
+    boost::split(pathComponents, executablePath, boost::is_any_of("\\/"));
+    std::string executableName = pathComponents.empty() ? "" : pathComponents.back();
+    return executableName;
+}
+
+// function to check if a process with the given name is already running
+bool is_process_running(const std::string& process_name) 
+{
+    namespace bp = boost::process;
+
+    // determine which command to use based on the platform
+    std::string command = bp::search_path("tasklist").string();
+    std::vector<std::string> args;
+
+    if (!command.empty()) 
+    {
+        // windows platform
+        args = { "/FI", "IMAGENAME eq " + process_name };
+    }
+    else 
+    {
+        // unix-like platform
+        command = bp::search_path("pgrep").string();
+        args = { process_name };
+    }
+
+    bp::ipstream pipe_stream;
+    bp::child c(command, bp::args(args), bp::std_out > pipe_stream);
+
+    std::string line;
+    int count = 0;
+    while (pipe_stream && std::getline(pipe_stream, line) && !line.empty()) 
+    {
+        if (line.find(process_name) != std::string::npos) 
+        {
+            ++count;
+            if (count > 1) 
+            {
+                c.terminate();
+                return true;
+            }
+        }
+    }
+
+    c.wait();
+    return false;
+}
 
 // simple function to check if a file exists
 bool FileExists(const std::string& path) 

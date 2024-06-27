@@ -65,13 +65,13 @@
 
 - Failsafe for invalid launch configuration file formatting; if any of the fields are formatted incorrectly, a warning is displayed and the entire process is aborted.
 
-- Failsafe for invalid .ucs file formatting; if any .ucs files have incorrect formatting, line order, or duplicate entries, a warning is displayed and the entire process is aborted. Additionally, if a .ucs file is not UTF-16 LE, an attempt will be made to convert the file to UTF-16 LE. If this attempt fails, a warning is displayed and the entire process is aborted.
+- Failsafe for invalid .ucs file formatting; if any .ucs files have incorrect formatting or duplicate entries, a warning is displayed and the entire process is aborted. Additionally, if a .ucs file is not UTF-16 LE, an attempt will be made to convert the file to UTF-16 LE. If this attempt fails, a warning is displayed and the entire process is aborted.
 
 - Failsafe for localization folders; if there are no files under the Locale folder, a warning is displayed and the entire process is aborted.
 
 - Failsafe for missing GPU; if the launcher detects no GPU, integrated or dedicated, a warning is displayed, but the process continues; likewise, if the [IsDXVK] field of the .launchconfig file is set to true, and the launcher detects no Vulkan capable GPU, a warning is displayed, but the process continues.
 
-- Compatibility with Linux and MacOS, though currently severely limited in functionality.
+- Compatibility with Linux, though currently severely limited in functionality.
 
 - Various minor failsafes for specific failed operations.
 
