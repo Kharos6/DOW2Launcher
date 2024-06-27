@@ -4,7 +4,7 @@
 
 **SETUP INSTRUCTIONS**
 
-- Put the .exe and .launchconfig files into your Dawn of War II game directory.
+- Put the .exe and .launchconfig files into your desired Dawn of War II game directory.
 
 - Change the names of both files to match the name of your mod's .module file.
 
@@ -70,6 +70,8 @@
 - Failsafe for localization folders; if there are no files under the Locale folder, a warning is displayed and the entire process is aborted.
 
 - Failsafe for missing GPU; if the launcher detects no GPU, integrated or dedicated, a warning is displayed, but the process continues; likewise, if the [IsDXVK] field of the .launchconfig file is set to true, and the launcher detects no Vulkan capable GPU, a warning is displayed, but the process continues.
+
+- Compatibility with Linux and MacOS, though currently severely limited in functionality.
 
 - Various minor failsafes for specific failed operations.
 

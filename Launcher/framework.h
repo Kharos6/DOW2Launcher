@@ -7,6 +7,7 @@
 #pragma comment(lib, "vulkan-1.lib")
 
 #define WIN32_LEAN_AND_MEAN
+#define BOOST_DISABLE_CURRENT_LOCATION
 #define TIMEOUT_PROCESS 60000 // absolute timeout for the entire process
 #define CONSOLE_MESSAGE(msg) \
     if (consoleShown) { \
@@ -14,7 +15,6 @@
     }
 
 #include <windows.h>
-#include <winnt.h>
 #include <tlhelp32.h>
 #include <thread>
 #include <wincrypt.h>
@@ -34,16 +34,31 @@
 #include <dxgi.h>
 #include <algorithm>
 #include <cctype>
+#include <chrono>
+#include <cstdlib>
+#include <sys/stat.h>
+#include <mutex>
+#include <boost/process.hpp>
+#include <boost/interprocess/sync/named_mutex.hpp>
+#include <boost/interprocess/exceptions.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/locale.hpp>
+#include <boost/dll/runtime_symbol_info.hpp>
+#include <boost/predef/os.h>
+
 #include "vulkan/vulkan.h"
 
-// helper function to convert a wide string to a narrow string
-std::string WStringToString(const std::wstring& wstr)
-{
-    int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
-    std::string str(sizeNeeded, 0);
-    WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &str[0], sizeNeeded, NULL, NULL);
-    return str;
-}
+
+
+//
+//
+// 
+// WINDOWS-EXCLUSIVE FUNCTIONS
+// 
+// 
+//
+
+
 
 // function to display a bitmap while launching
 HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bitmapWidth, int bitmapHeight)
@@ -81,32 +96,6 @@ HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bit
     UpdateWindow(hwnd);
 
     return hwnd;
-}
-
-// function to copy raw data from source to destination
-bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePath)
-{
-    std::ifstream srcFile(srcFilePath, std::ios::binary);
-    if (!srcFile.is_open())
-    {
-        MessageBox(NULL, (L"Failed to find or open the source file for read operation: " + srcFilePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
-        return false;
-    }
-
-    std::ofstream dstFile(dstFilePath, std::ios::binary);
-    if (!dstFile.is_open())
-    {
-        MessageBox(NULL, (L"Failed to find or open the destination file for write operation: " + dstFilePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
-        srcFile.close();
-        return false;
-    }
-
-    dstFile << srcFile.rdbuf();
-
-    srcFile.close();
-    dstFile.close();
-
-    return true;
 }
 
 // function to calculate the MD5 checksum of a file
@@ -257,18 +246,22 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     DWORD dummy = 0;
     DWORD size = GetFileVersionInfoSizeW(filePath.c_str(), &dummy);
 
-    if (size == 0) {
+    if (size == 0) 
+    {
         versionInfoStrings[L"Error"] = L"GetFileVersionInfoSizeW failed";
-        if (verboseDebug) {
+        if (verboseDebug) 
+        {
             MessageBox(NULL, L"GetFileVersionInfoSizeW failed", L"Debug", MB_OK | MB_ICONINFORMATION);
         }
         return versionInfoStrings;
     }
 
     std::vector<char> buffer(size);
-    if (!GetFileVersionInfoW(filePath.c_str(), 0, size, buffer.data())) {
+    if (!GetFileVersionInfoW(filePath.c_str(), 0, size, buffer.data())) 
+    {
         versionInfoStrings[L"Error"] = L"GetFileVersionInfoW failed";
-        if (verboseDebug) {
+        if (verboseDebug) 
+        {
             MessageBox(NULL, L"GetFileVersionInfoW failed", L"Debug", MB_OK | MB_ICONINFORMATION);
         }
         return versionInfoStrings;
@@ -283,31 +276,38 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     } *lpTranslate = nullptr;
 
     UINT cbTranslate = 0;
-    if (VerQueryValueW(buffer.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&lpTranslate, &cbTranslate)) {
-        for (UINT i = 0; i < (cbTranslate / sizeof(struct LANGANDCODEPAGE)); i++) {
+    if (VerQueryValueW(buffer.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&lpTranslate, &cbTranslate)) 
+    {
+        for (UINT i = 0; i < (cbTranslate / sizeof(struct LANGANDCODEPAGE)); i++) 
+        {
             wchar_t subBlock[50];
             swprintf_s(subBlock, 50, L"\\StringFileInfo\\%04x%04x\\", lpTranslate[i].wLanguage, lpTranslate[i].wCodePage);
 
             std::wstring keys[] = { L"ProductName", L"CompanyName", L"FileDescription", L"FileVersion" };
 
             for (const auto& key : keys) {
-                if (VerQueryValueW(buffer.data(), (std::wstring(subBlock) + key).c_str(), &verData, &verDataLen)) {
+                if (VerQueryValueW(buffer.data(), (std::wstring(subBlock) + key).c_str(), &verData, &verDataLen)) 
+                {
                     versionInfoStrings[key] = std::wstring(static_cast<wchar_t*>(verData));
-                    if (verboseDebug) {
+                    if (verboseDebug) 
+                    {
                         MessageBox(NULL, (L"Found " + key + L": " + versionInfoStrings[key]).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
                     }
                 }
                 else {
-                    if (verboseDebug) {
+                    if (verboseDebug) 
+                    {
                         MessageBox(NULL, (L"VerQueryValueW failed for " + key).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
                     }
                 }
             }
         }
     }
-    else {
+    else 
+    {
         versionInfoStrings[L"Error"] = L"VerQueryValueW for Translation failed";
-        if (verboseDebug) {
+        if (verboseDebug) 
+        {
             MessageBox(NULL, L"VerQueryValueW for Translation failed", L"Debug", MB_OK | MB_ICONINFORMATION);
         }
     }
@@ -342,44 +342,6 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType)
     }
 }
 
-// function to validate launch parameter field formatting
-bool ValidateLaunchParams(const std::wstring& launchParams)
-{
-    std::wistringstream iss(launchParams);
-    std::wstring token;
-    std::wregex paramRegex(L"^-\\w+|^-\\w+\\s+\\w+$");
-
-    while (iss >> token)
-    {
-        if (!std::regex_match(token, paramRegex))
-        {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// function to validate file name field formatting
-bool ValidateFileName(const std::wstring& injectorFileName)
-{
-    size_t pos = injectorFileName.find(L".");
-    return (pos != std::wstring::npos) && (pos < injectorFileName.length() - 1);
-}
-
-// function to validate boolean fields
-bool ValidateBooleanField(const std::wstring& value)
-{
-    return value == L"true" || value == L"false";
-}
-
-// function to validate integer fields
-bool ValidateIntegerField(const std::wstring& value)
-{
-    std::wregex intRegex(L"^-?\\d+$");
-    return std::regex_match(value, intRegex);
-}
-
 // function to check if a dedicated gpu is present
 bool HasGPU()
 {
@@ -409,43 +371,6 @@ bool HasGPU()
 
     pFactory->Release();
     return hasGPU;
-}
-
-// function to check for GPU vulkan support
-bool HasVulkanSupport()
-{
-    VkInstance instance;
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "VulkanCheck";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
-
-    VkInstanceCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
-        return false;
-    }
-
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-    vkDestroyInstance(instance, nullptr);
-
-    return deviceCount > 0;
-}
-
-// helper function to trim whitespace from a string
-std::wstring Trim(const std::wstring& str)
-{
-    size_t first = str.find_first_not_of(L' ');
-    if (first == std::wstring::npos)
-        return L"";
-    size_t last = str.find_last_not_of(L' ');
-    return str.substr(first, last - first + 1);
 }
 
 // function to query "bitness"
@@ -529,4 +454,136 @@ bool ApplyLargeAddressAwarePatch(const std::wstring& filePath)
     CloseHandle(hFile);
 
     return true;
+}
+
+
+
+//
+//
+//
+//CROSS-PLATFORM FUNCTIONS
+//
+//
+//
+
+
+
+// simple function to check if a file exists
+bool FileExists(const std::string& path) 
+{
+    return boost::filesystem::exists(path);
+}
+
+// function to check for GPU vulkan support
+bool HasVulkanSupport()
+{
+    VkInstance instance;
+    VkApplicationInfo appInfo = {};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "VulkanCheck";
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.pEngineName = "No Engine";
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pApplicationInfo = &appInfo;
+
+    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) 
+    {
+        return false;
+    }
+
+    uint32_t deviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+    vkDestroyInstance(instance, nullptr);
+
+    return deviceCount > 0;
+}
+
+// helper function to trim whitespace from a string
+std::wstring Trim(const std::wstring& str)
+{
+    size_t first = str.find_first_not_of(L' ');
+    if (first == std::wstring::npos)
+        return L"";
+    size_t last = str.find_last_not_of(L' ');
+    return str.substr(first, last - first + 1);
+}
+
+// function to validate launch parameter field formatting
+bool ValidateLaunchParams(const std::wstring& launchParams)
+{
+    std::wistringstream iss(launchParams);
+    std::wstring token;
+    std::wregex paramRegex(L"^-\\w+|^-\\w+\\s+\\w+$");
+
+    while (iss >> token)
+    {
+        if (!std::regex_match(token, paramRegex))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+// function to validate file name field formatting
+bool ValidateFileName(const std::wstring& injectorFileName)
+{
+    size_t pos = injectorFileName.find(L".");
+    return (pos != std::wstring::npos) && (pos < injectorFileName.length() - 1);
+}
+
+// function to validate boolean fields
+bool ValidateBooleanField(const std::wstring& value)
+{
+    return value == L"true" || value == L"false";
+}
+
+// function to validate integer fields
+bool ValidateIntegerField(const std::wstring& value)
+{
+    std::wregex intRegex(L"^-?\\d+$");
+    return std::regex_match(value, intRegex);
+}
+
+// function to check if we're running on Windows
+bool RunningOnWindows() {
+    return BOOST_OS_WINDOWS;
+}
+
+// function to check if we're running on Linux
+bool RunningOnLinux() {
+    return BOOST_OS_LINUX;
+}
+
+// function to check if we're running on Mac
+bool RunningOnMac() {
+    return BOOST_OS_MACOS;
+}
+
+// function to convert wide string to string
+std::string WStringToString(const std::wstring& wstr) 
+{
+    return boost::locale::conv::utf_to_utf<char>(wstr);
+}
+
+// function to copy raw data from source to destination
+bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePath) 
+{
+    try 
+    {
+        boost::filesystem::copy_file(boost::locale::conv::utf_to_utf<char>(srcFilePath),
+            boost::locale::conv::utf_to_utf<char>(dstFilePath),
+            boost::filesystem::copy_options::overwrite_existing);
+        return true;
+    }
+    catch (const boost::filesystem::filesystem_error& e) 
+    {
+        std::cerr << e.what() << std::endl;
+        return false;
+    }
 }
