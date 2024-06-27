@@ -52,7 +52,7 @@ bool InjectedConfigurationsPresent(const std::wstring& launcherName, const std::
 {
     for (const auto& ext : injectedConfigurations)
     {
-        std::wstring filePath = launcherName + L"." + ext;
+        std::wstring filePath = launcherName + ext;
 
         if (GetFileAttributes(filePath.c_str()) == INVALID_FILE_ATTRIBUTES)
         {
@@ -570,13 +570,18 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
         line.erase(0, line.find_first_not_of(L" \t"));
         line.erase(line.find_last_not_of(L" \t") + 1);
 
+        // skip empty lines
+        if (line.empty())
+        {
+            continue;
+        }
+
         // find the first whitespace character
         size_t spacePos = line.find_first_of(L"\t ");
-        if (spacePos == std::wstring::npos || spacePos == 0)
+
+        if (spacePos == std::wstring::npos)
         {
-            std::wstring errorMessage = L"Degenerate or empty entry in UCS file: " + filePath + L"\nLine: " + std::to_wstring(lineNumber) + L": " + line;
-            MessageBox(NULL, errorMessage.c_str(), L"Error", MB_OK | MB_ICONERROR);
-            return false;
+            continue;
         }
 
         std::wstring numberPart = line.substr(0, spacePos);
