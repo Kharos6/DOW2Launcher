@@ -7,6 +7,7 @@ struct LaunchConfig
 {
     bool Injector = false;
     std::string ExpectedInjectorFileMD5Checksum;
+    std::string ExpectedXThreadFileMD5Checksum;
     std::wstring LaunchParams;
     int BitmapWidth = 600;  // default width
     int BitmapHeight = 300; // default height
@@ -23,6 +24,7 @@ struct LaunchConfig
     std::vector<std::wstring> InjectedConfigurations;
     std::wstring GameVersion;
     bool LAAPatch = false;
+    bool UIWarnings = false;
 };
 
 // function to validate the presence of necessary injector files
@@ -87,7 +89,7 @@ LaunchConfig ReadLaunchConfig()
     std::wstring line;
     std::set<std::wstring> requiredKeys = 
     {
-        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch"
+        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"ExpectedXThreadFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch", L"UIWarnings"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -115,6 +117,13 @@ LaunchConfig ReadLaunchConfig()
         else if (key == L"ExpectedInjectorFileMD5Checksum")
         {
             if (config.Injector)
+            {
+                config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
+            }
+        }
+        else if (key == L"ExpectedXThreadFileMD5Checksum")
+        {
+            if (!config.Injector)
             {
                 config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
             }
@@ -154,7 +163,12 @@ LaunchConfig ReadLaunchConfig()
             config.LaunchParams = value;
             if (!ValidateLaunchParams(config.LaunchParams))
             {
-                MessageBox(NULL, L"Invalid formatting for the [LaunchParams] field of the launch configuration file. Each parameter must be separated by a space, and there must be no space between the first launch parameter and the [=] sign.", L"Error", MB_OK | MB_ICONERROR);
+                MessageBox(NULL, L"Invalid formatting for the [LaunchParams] field of the launch configuration file. Each parameter must start with a [-] sign, and be separated by a space.", L"Error", MB_OK | MB_ICONERROR);
+                exit(1);
+            }
+            if (config.LaunchParams.find(L"-modname") != std::wstring::npos)
+            {
+                MessageBox(NULL, L"The [LaunchParams] field of the launch configuration file contains the -modname parameter, which is automatically applied with the appropriate argument for the mod based on the name of the launcher. Remove -modname from the launch configuration file.", L"Error", MB_OK | MB_ICONERROR);
                 exit(1);
             }
         }
@@ -233,7 +247,7 @@ LaunchConfig ReadLaunchConfig()
                     while ((endPos = value.find(L", ", startPos)) != std::wstring::npos)
                     {
                         token = value.substr(startPos, endPos - startPos);
-                        token = Trim(token);
+                        token = TrimWString(token);
                         if (token.find(L".dll") == std::wstring::npos)
                         {
                             MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension.", L"Error", MB_OK | MB_ICONERROR);
@@ -248,7 +262,7 @@ LaunchConfig ReadLaunchConfig()
                         startPos = endPos + 2;
                     }
                     token = value.substr(startPos);
-                    token = Trim(token);
+                    token = TrimWString(token);
                     if (token.find(L".dll") == std::wstring::npos)
                     {
                         MessageBox(NULL, L"Invalid formatting for the [InjectedFiles] field of the launch configuration file. Each full file name must include the DLL file extension.", L"Error", MB_OK | MB_ICONERROR);
@@ -274,7 +288,7 @@ LaunchConfig ReadLaunchConfig()
                     while ((endPos = value.find(L", ", startPos)) != std::wstring::npos)
                     {
                         token = value.substr(startPos, endPos - startPos);
-                        token = Trim(token);
+                        token = TrimWString(token);
                         if (token.find(L'.') == std::wstring::npos)
                         {
                             MessageBox(NULL, L"Invalid formatting for the [InjectedConfigurations] field of the launch configuration file. Each entry must be a valid file extension for injection configuration file types used by the mod.", L"Error", MB_OK | MB_ICONERROR);
@@ -289,7 +303,7 @@ LaunchConfig ReadLaunchConfig()
                         startPos = endPos + 2;
                     }
                     token = value.substr(startPos);
-                    token = Trim(token);
+                    token = TrimWString(token);
                     if (token.find(L'.') == std::wstring::npos)
                     {
                         MessageBox(NULL, L"Invalid formatting for the [InjectedConfigurations] field of the launch configuration file. Each entry must be a valid file extension for injection configuration file types used by the mod.", L"Error", MB_OK | MB_ICONERROR);
@@ -319,6 +333,15 @@ LaunchConfig ReadLaunchConfig()
                 exit(1);
             }
             config.LAAPatch = (value == L"true");
+        }
+        else if (key == L"UIWarnings")
+        {
+            if (!ValidateBooleanField(value))
+            {
+                MessageBox(NULL, L"Invalid formatting for the [UIWarnings] field of the launch configuration file. It must be true or false.", L"Error", MB_OK | MB_ICONERROR);
+                exit(1);
+            }
+            config.UIWarnings = (value == L"true");
         }
         else
         {
@@ -371,6 +394,7 @@ void WriteLaunchConfig(const LaunchConfig& config)
     configFile << L"GameVersion=" << config.GameVersion << L"\n";
     configFile << L"IsDXVK=" << (config.IsDXVK ? L"true" : L"false") << L"\n";
     configFile << L"LAAPatch=" << (config.LAAPatch ? L"true" : L"false") << L"\n";
+    configFile << L"UIWarnings=" << (config.UIWarnings ? L"true" : L"false") << L"\n";
     configFile << L"LaunchParams=" << config.LaunchParams << L"\n";
     configFile << L"BitmapWidth=" << config.BitmapWidth << L"\n";
     configFile << L"BitmapHeight=" << config.BitmapHeight << L"\n";
@@ -397,6 +421,7 @@ void WriteLaunchConfig(const LaunchConfig& config)
     }
     configFile << L"\n";
     configFile << L"ExpectedInjectorFileMD5Checksum=" << std::wstring(config.ExpectedInjectorFileMD5Checksum.begin(), config.ExpectedInjectorFileMD5Checksum.end()) << L"\n";
+    configFile << L"ExpectedXThreadFileMD5Checksum=" << std::wstring(config.ExpectedXThreadFileMD5Checksum.begin(), config.ExpectedXThreadFileMD5Checksum.end()) << L"\n";
     configFile << L"FirstTimeLaunchCheck=" << (config.FirstTimeLaunchCheck ? L"true" : L"false") << L"\n";
     configFile << L"FirstTimeLaunchMessage=" << config.FirstTimeLaunchMessage << L"\n";
     configFile << L"VerboseDebug=" << (config.VerboseDebug ? L"true" : L"false") << L"\n";
@@ -428,7 +453,7 @@ std::wstring ReadModFolderFromConfig(const std::wstring& configFilePath)
 
         if (key == L"mod-folder")
         {
-            modFolder = Trim(value);
+            modFolder = TrimWString(value);
             break;
         }
     }
@@ -576,16 +601,19 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
             continue;
         }
 
-        // find the first whitespace character
-        size_t spacePos = line.find_first_of(L"\t ");
+        size_t firstNonDigitPos = line.find_first_not_of(L"0123456789");
 
-        if (spacePos == std::wstring::npos)
+        // if no digits found at the start of the line
+        if (firstNonDigitPos == 0)
         {
-            continue;
+            std::wstring errorMessage = L"Not a number entry in UCS file: " + filePath + L"\nLine: " + std::to_wstring(lineNumber) + L": " + line;
+            MessageBox(NULL, errorMessage.c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return false;
         }
 
-        std::wstring numberPart = line.substr(0, spacePos);
-        std::wstring textPart = line.substr(spacePos + 1);
+        // if the number part is found, extract it
+        std::wstring numberPart = line.substr(0, firstNonDigitPos);
+        std::wstring textPart = line.substr(firstNonDigitPos);
 
         // ensure the number part is purely numeric
         if (!std::all_of(numberPart.begin(), numberPart.end(), iswdigit))
@@ -602,19 +630,6 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
         catch (const std::exception& e)
         {
             std::wstring errorMessage = L"Failed to convert entry number for reading in UCS file: " + filePath + L"\nLine: " + std::to_wstring(lineNumber) + L": " + line + L"\nException: " + std::wstring(e.what(), e.what() + strlen(e.what()));
-            MessageBox(NULL, errorMessage.c_str(), L"Error", MB_OK | MB_ICONERROR);
-            return false;
-        }
-
-        // check for duplicate numbers within the same file
-        if (numberLineMap.find(currentNumber) != numberLineMap.end())
-        {
-            std::wstring errorMessage = L"Duplicate entry in UCS file: " + filePath + L"\nNumber: " + std::to_wstring(currentNumber) + L" found on lines: ";
-            for (int ln : numberLineMap[currentNumber])
-            {
-                errorMessage += std::to_wstring(ln) + L", ";
-            }
-            errorMessage += std::to_wstring(lineNumber);
             MessageBox(NULL, errorMessage.c_str(), L"Error", MB_OK | MB_ICONERROR);
             return false;
         }
@@ -829,6 +844,68 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
     return true;
 }
 
+void CheckGameConfiguration(const LaunchConfig& config) 
+{
+    wchar_t* userProfilePath = nullptr;
+    SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &userProfilePath);
+
+    std::wstring gameFolder = config.IsRetribution ? L"Dawn of War II - Retribution" : L"Dawn of War 2";
+    std::wstring gameConfigFilePath = std::wstring(userProfilePath) + L"\\My Games\\" + gameFolder + L"\\Settings\\configuration.lua";
+
+    std::wifstream configFile(gameConfigFilePath);
+    if (!configFile) 
+    {
+        std::cerr << "Error opening the game's configuration file: " << WStringToString(gameConfigFilePath) << std::endl;
+        return; // if file loading fails, simply return and continue the program
+    }
+
+    int screenWidth = 0;
+    int screenHeight = 0;
+    int uiScale = 100;
+
+    std::wregex screenWidthRegex(L"setting = \"screenwidth\".*?value = (\\d+)");
+    std::wregex screenHeightRegex(L"setting = \"screenheight\".*?value = (\\d+)");
+    std::wregex uiScaleRegex(L"setting = \"uiscale\".*?value = (\\d+)");
+
+    std::wsmatch match;
+    std::wstring line;
+
+    while (std::getline(configFile, line)) 
+    {
+        if (std::regex_search(line, match, screenWidthRegex)) 
+        {
+            screenWidth = std::stoi(match[1]);
+        }
+        else if (std::regex_search(line, match, screenHeightRegex)) 
+        {
+            screenHeight = std::stoi(match[1]);
+        }
+        else if (std::regex_search(line, match, uiScaleRegex)) 
+        {
+            uiScale = std::stoi(match[1]);
+        }
+    }
+
+    configFile.close();
+
+    if (screenWidth > 0 && screenHeight > 0) 
+    {
+        if (!CheckAspectRatio(screenWidth, screenHeight)) 
+        {
+            std::wstringstream warningMessage;
+            warningMessage << L"This mod requires the game resolution to be set to a 16:9 aspect ratio in order for the UI to function correctly. 16:9 resolutions include any resolution marked in the game as Widescreen, such as 1280x720, 1920x1080, 2560x1440, or 3840x2160. If you are unable to change the resolution in the game, you instead change the screenWidth and screenHeight values in the following configuration file:" << gameConfigFilePath;
+            MessageBox(NULL, warningMessage.str().c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+        }
+    }
+
+    if (uiScale != 100) 
+    {
+        std::wstringstream warningMessage;
+        warningMessage << L"This mod requires the UI scale setting to be set to 100 in order for the UI to function correctly. Adjust the UI scale in the following configuration file: " << gameConfigFilePath;
+        MessageBox(NULL, warningMessage.str().c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+    }
+}
+
 // main function
 int main()
 {
@@ -837,6 +914,8 @@ int main()
     if (is_process_running(process_name)) 
     {
         std::cerr << "Another instance of the launcher is already running. Wait for it to close, or manually terminate it before attempting to launch again." << std::endl;
+        std::cerr << "Press [Enter] to exit..." << std::endl;
+        std::cin.get();
         return 1;
     }
 
@@ -846,12 +925,16 @@ int main()
     if (RunningOnWindows())
     {
         isWindows = true;
+        isLinux = false;
     }
 
     if (RunningOnLinux())
     {
         std::cout << "Detected Linux. The launcher will proceed in Linux safe mode, though advanced launcher features and functionality will be limited." << std::endl;
+        std::cerr << "Press [Enter] to continue..." << std::endl;
+        std::cin.get();
         isLinux = true;
+        isWindows = false;
     }
 
     if (isWindows)
@@ -885,23 +968,6 @@ int main()
         // read launch parameters from the .launchconfig file
         LaunchConfig config = ReadLaunchConfig();
 
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Attempting to read the configuration file.", L"Debug", MB_OK | MB_ICONINFORMATION);
-            MessageBox(NULL, (L"Launcher name: " + launcherName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-            MessageBox(NULL, (L"Bitmap file name: " + bitmapFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-            MessageBox(NULL, (L"Module file name: " + moduleFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-            MessageBox(NULL, (L"Config file name: " + configFileName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-            MessageBox(NULL, (L"Mod name: " + modName).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        // check if DOW2.exe is already running
-        if (IsProcessRunning(APP_NAME))
-        {
-            MessageBox(NULL, L"DOW2.exe is already running. Please close it before launching again.", L"Error", MB_OK | MB_ICONERROR);
-            return 1;
-        }
-
         // display the bitmap
         HWND hwndBitmap = ShowBitmap(hInstance, bitmapFileName, config.BitmapWidth, config.BitmapHeight);
 
@@ -911,15 +977,12 @@ int main()
         // check the global timeout
         if (GetTickCount64() - startTime > TIMEOUT_PROCESS)
         {
-            if (!config.IsUnsafe)
+            MessageBox(NULL, L"Launcher process timed out before all operations could complete.", L"Error", MB_OK | MB_ICONERROR);
+            if (hwndBitmap)
             {
-                MessageBox(NULL, L"Launcher process timed out before all operations could complete.", L"Error", MB_OK | MB_ICONERROR);
-                if (hwndBitmap)
-                {
-                    DestroyWindow(hwndBitmap);
-                }
-                return 1;
+                DestroyWindow(hwndBitmap);
             }
+            return 1;
         }
 
         // check for console and bitmap
@@ -945,66 +1008,22 @@ int main()
             _wfreopen_s(&stream, L"CONOUT$", L"w", stderr);
         }
 
-        CONSOLE_MESSAGE(L"Launcher initialized.");
-
-        if (config.VerboseDebug) {
+        if (config.VerboseDebug)
+        {
             MessageBox(NULL, L"Verbose logging is enabled.", L"Debug", MB_OK | MB_ICONINFORMATION);
         }
 
-        if (config.VerboseDebug && config.IsUnsafe) {
+        if (config.VerboseDebug && config.IsUnsafe) 
+        {
             MessageBox(NULL, L"Unsafe mode is enabled.", L"Debug", MB_OK | MB_ICONINFORMATION);
         }
 
-        if (config.VerboseDebug) {
-            MessageBox(NULL, L"Configuration file read successfully.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
+        CONSOLE_MESSAGE(L"Launcher initialized.");
 
-        // check if DOW2.exe exists in the same directory as the launcher
-        if (GetFileAttributes(APP_NAME) == INVALID_FILE_ATTRIBUTES)
+        // START CHECKS
+        if (!config.IsUnsafe)
         {
-            MessageBox(NULL, L"Failed to find DOW2.exe. You have installed the mod into the wrong directory, or your game is missing or corrupt. Install the mod into the correct directory, or try again.", L"Error", MB_OK | MB_ICONERROR);
-            return 1;
-        }
-
-        if (config.VerboseDebug) {
-            MessageBox(NULL, L"Found DOW2.exe.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        CONSOLE_MESSAGE(L"DOW2 check.");
-
-        // check if the .module file exists in the same directory
-        if (GetFileAttributes(moduleFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
-        {
-            if (!config.IsUnsafe)
-            {
-                MessageBox(NULL, (L"Failed to find the mod's " + moduleFileName + L" module file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-                return 1;
-            }
-        }
-
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Found module file.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        if (!CheckModuleFile(moduleFileName, config))
-        {
-            if (!config.IsUnsafe)
-            {
-                return 1;
-            }
-        }
-
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Verified module contents.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        CONSOLE_MESSAGE(L"Module check.");
-
-        if (config.FirstTimeLaunchCheck)
-        {
-            if (!config.IsUnsafe)
+            if (config.FirstTimeLaunchCheck)
             {
                 MessageBox(NULL, config.FirstTimeLaunchMessage.c_str(), L"First Launch", MB_OK | MB_ICONINFORMATION);
                 if (config.IsDXVK)
@@ -1015,17 +1034,344 @@ int main()
                 config.FirstTimeLaunchCheck = false;
                 WriteLaunchConfig(config);
             }
-        }
 
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Verified first time launch.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
+            if (config.VerboseDebug)
+            {
+                MessageBox(NULL, L"Verified first time launch.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
 
-        // check for injector
-        if (config.Injector)
-        {
-            if (!config.IsUnsafe)
+            // check if DOW2.exe is already running
+            if (IsProcessRunning(APP_NAME))
+            {
+                MessageBox(NULL, L"DOW2.exe is already running. Please close it before launching again.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            // check if DOW2.exe exists in the same directory as the launcher
+            if (GetFileAttributes(APP_NAME) == INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, L"Failed to find DOW2.exe. You have installed the mod into the wrong directory, or your game is missing or corrupt. Install the mod into the correct directory, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            if (config.VerboseDebug)
+            {
+                MessageBox(NULL, L"Found DOW2.exe.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            CONSOLE_MESSAGE(L"DOW2 check.");
+
+            // check for ChaosRisingGDF.dll if IsRetribution is true
+            if (config.IsRetribution && GetFileAttributes(L"ChaosRisingGDF.dll") != INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, L"Found ChaosRisingGDF.dll; this may be Dawn of War II - Chaos Rising, but this mod is for Dawn of War II - Retribution. Install the mod to Dawn of War II - Retribution.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            // check for CGalaxy.dll if IsSteam is true
+            if (config.IsSteam && GetFileAttributes(L"CGalaxy.dll") != INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, L"Found CGalaxy.dll; this may be a GOG distribution of the game, but this version of the mod is designed for the Steam distribution of the game. Install the mod to the Steam version of the game.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            if (!config.IsRetribution && GetFileAttributes(L"ChaosRisingGDF.dll") == INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, L"The ChaosRisingGDF.dll file is missing, but this mod is designed for Dawn of War II - Chaos Rising. Install the mod to Dawn of War II - Chaos Rising.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            // check for CGalaxy.dll if IsSteam is false and file does not exist
+            if (!config.IsSteam && GetFileAttributes(L"CGalaxy.dll") == INVALID_FILE_ATTRIBUTES)
+            {
+                MessageBox(NULL, L"The CGalaxy.dll file is missing, but this mod is designed for the GOG distribution of the game. Install the mod to the GOG distribution of the game.", L"Error", MB_OK | MB_ICONERROR);
+                return 1;
+            }
+
+            // check GameVersion field entry against DOW2.exe file version
+            if (!config.GameVersion.empty())
+            {
+                std::map<std::wstring, std::wstring> versionStrings = GetFileVersionStrings(APP_NAME, config.VerboseDebug);
+                if (versionStrings[L"FileVersion"] != config.GameVersion) {
+                    MessageBox(NULL, (L"File version of DOW2.exe does not match the supported version of the game. Your gameplay experience may be altered, or the mod may not work. Expected: " + config.GameVersion + L", Found: " + versionStrings[L"FileVersion"]).c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+                    if (config.VerboseDebug)
+                    {
+                        std::wstring debugMessage = L"DOW2.exe version info:\n";
+                        for (const auto& pair : versionStrings) {
+                            debugMessage += pair.first + L": " + pair.second + L"\n";
+                        }
+                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
+                    }
+                }
+            }
+
+            if (config.VerboseDebug)
+            {
+                MessageBox(NULL, L"Verified version.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            CONSOLE_MESSAGE(L"Version check.");
+
+            int numCores = GetProcessorCoreCount();
+
+            if (numCores > 12 && config.IsSteam && !config.Injector)
+            {
+                std::wstring dllPath = L"XThread.dll";
+                std::wstring binPath = L"XThread.bin";
+                std::string currentMD5;
+
+                if (GetFileAttributes(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                {
+                    if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != config.ExpectedInjectorFileMD5Checksum)
+                    {
+                        std::wstringstream warningMessage;
+                        warningMessage << L"Your CPU has more than 12 cores, and DOW2.exe will not launch unless the current XThread.dll file is replaced with an updated version. Would you like to replace the file?";
+                        int msgboxID = MessageBox(NULL, warningMessage.str().c_str(), L"Warning", MB_YESNO | MB_ICONWARNING);
+                        if (msgboxID == IDYES)
+                        {
+                            if (!CopyFileRaw(binPath, dllPath))
+                            {
+                                MessageBox(NULL, L"Failed to create or replace the XThread.dll file with the updated version, the XThread.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                                return 1;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (config.VerboseDebug && config.IsSteam && !config.Injector)
+            {
+                MessageBox(NULL, L"Verified CPU.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            if (config.VerboseDebug && config.IsSteam && !config.Injector)
+            {
+                CONSOLE_MESSAGE(L"CPU check.");
+            }
+
+            // check for a vulkan-capable GPU if DXVK is true
+            if (config.IsDXVK && !HasVulkanSupport())
+            {
+                MessageBox(NULL, L"No Vulkan capable GPU detected by the launcher, the game will likely not run with DXVK, which is required for this mod.", L"Warning", MB_OK | MB_ICONWARNING);
+            }
+
+            if (config.VerboseDebug && config.IsDXVK)
+            {
+                MessageBox(NULL, L"Verified Vulkan.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            if (config.VerboseDebug && config.IsDXVK)
+            {
+                CONSOLE_MESSAGE(L"Vulkan check.");
+            }
+
+            bool d3d9IsDXVK = false;
+
+            // check for dxvk
+            if (config.IsDXVK)
+            {
+                bool d3d9Missing = false;
+                bool dxvkConfMissing = false;
+
+                if (GetFileAttributes(L"d3d9.dll") == INVALID_FILE_ATTRIBUTES)
+                {
+                    d3d9Missing = true;
+                }
+
+                if (GetFileAttributes(L"dxvk.conf") == INVALID_FILE_ATTRIBUTES)
+                {
+                    dxvkConfMissing = true;
+                }
+
+                if (d3d9Missing)
+                {
+                    int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch the mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                    if (msgboxID == IDYES)
+                    {
+                        if (!CopyFileRaw(L"d3d9.bin", L"d3d9.dll"))
+                        {
+                            MessageBox(NULL, L"Failed to create or replace the d3d9.dll file with the DXVK version, the d3d9.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                            return 1;
+                        }
+                        d3d9IsDXVK = true;
+
+                        if (dxvkConfMissing)
+                        {
+                            std::ofstream dxvkConfFile("dxvk.conf");
+                            if (!dxvkConfFile)
+                            {
+                                MessageBox(NULL, L"Failed to create the dxvk.conf file. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                                return 1;
+                            }
+                            dxvkConfFile << "dxgi.maxFrameRate = 60\n";
+                            dxvkConfFile << "d3d9.maxFrameRate = 60\n";
+                            dxvkConfFile.close();
+                        }
+                    }
+                }
+                else
+                {
+                    auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+
+                    if (config.VerboseDebug)
+                    {
+                        std::wstring debugMessage = L"d3d9.dll version info:\n";
+                        for (const auto& pair : versionStrings)
+                        {
+                            debugMessage += pair.first + L": " + pair.second + L"\n";
+                        }
+                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
+                    }
+
+                    if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] != L"DXVK")
+                    {
+                        int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                        if (msgboxID == IDYES)
+                        {
+                            if (!CopyFileRaw(L"d3d9.bin", L"d3d9.dll"))
+                            {
+                                MessageBox(NULL, L"Failed to create or replace the d3d9.dll file with the DXVK version, the d3d9.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                                return 1;
+                            }
+                        }
+                    }
+
+                    if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] == L"DXVK")
+                    {
+                        d3d9IsDXVK = true;
+                    }
+
+                    if (dxvkConfMissing && d3d9IsDXVK)
+                    {
+                        std::ofstream dxvkConfFile("dxvk.conf");
+                        if (!dxvkConfFile)
+                        {
+                            MessageBox(NULL, L"Failed to create the dxvk.conf file. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                            return 1;
+                        }
+                        dxvkConfFile << "dxgi.maxFrameRate = 60\n";
+                        dxvkConfFile << "d3d9.maxFrameRate = 60\n";
+                        dxvkConfFile.close();
+                    }
+                }
+            }
+            else
+            {
+                auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+
+                if (config.VerboseDebug)
+                {
+                    std::wstring debugMessage = L"d3d9.dll version info:\n";
+                    for (const auto& pair : versionStrings)
+                    {
+                        debugMessage += pair.first + L": " + pair.second + L"\n";
+                    }
+                    MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
+                }
+
+                if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK") {
+                    int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                    if (msgboxID == IDYES)
+                    {
+                        DeleteFile(L"d3d9.dll");
+                        DeleteFile(L"dxvk.conf");
+                    }
+                }
+            }
+
+            // additional checks for DXVK and Injector
+            if (config.IsDXVK && config.Injector && d3d9IsDXVK)
+            {
+                auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+                if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
+                {
+                    struct FileCheck
+                    {
+                        std::wstring fileName;
+                        std::wstring binFileName;
+                        std::string expectedMD5;
+                    };
+
+                    FileCheck filesToCheck[] =
+                    {
+                        {L"DivxDecoder.dll", L"DivxDecoder.bin", "57e72cae12091dafa29a8e4db8b4f1d1"},
+                        {L"DivxMediaLib.dll", L"DivxMediaLib.bin", "937c646bcd8407aee9de381b947433c8"}
+                    };
+
+                    for (const auto& file : filesToCheck)
+                    {
+                        std::wstring filePath = file.fileName;
+                        std::string currentMD5;
+                        if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                        {
+                            if (CalculateMD5(filePath.c_str(), currentMD5) && currentMD5 != file.expectedMD5)
+                            {
+                                if (!CopyFileRaw(file.binFileName, file.fileName))
+                                {
+                                    std::wstringstream errorMessage;
+                                    errorMessage << L"The DXVK and injector combination requires special DIVX files in order to allow for movies to play correctly, but we failed to create or replace the " << file.fileName << L" file with the correct version, the " << file.binFileName << L" file may be missing. Reacquire it from the mod package, or try again.";
+                                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (config.VerboseDebug && config.IsDXVK)
+            {
+                MessageBox(NULL, L"Verified DXVK.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            if (config.IsDXVK)
+            {
+                CONSOLE_MESSAGE(L"DXVK check.");
+            }
+
+            // check for LAA
+            if (config.LAAPatch && Is32BitApplication(APP_NAME))
+            {
+                if (!IsLargeAddressAware(APP_NAME))
+                {
+                    int msgboxID = MessageBox(NULL, L"DOW2.exe is not large address aware, meaning it won't allocate more than 2gb of address space, which is not enough for this mod. Would you like to apply the large address aware patch?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                    if (msgboxID == IDYES)
+                    {
+                        if (!ApplyLargeAddressAwarePatch(APP_NAME))
+                        {
+                            MessageBox(NULL, L"Failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
+                        }
+                    }
+                }
+            }
+
+            if (config.VerboseDebug && config.LAAPatch)
+            {
+                MessageBox(NULL, L"Verified large address aware.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            if (config.LAAPatch)
+            {
+                CONSOLE_MESSAGE(L"Large address aware check.");
+            }
+
+            // check game settings for UI incompatibilities, errors are handled in the function
+            if (config.UIWarnings)
+            {
+                CheckGameConfiguration(config);
+            }
+
+            if (config.VerboseDebug && config.UIWarnings)
+            {
+                MessageBox(NULL, L"Verified game configuration.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            if (config.UIWarnings)
+            {
+                CONSOLE_MESSAGE(L"Game configuration check.");
+            }
+
+            // check for injector
+            if (config.Injector)
             {
                 // check if the .config file exists in the same directory
                 if (GetFileAttributes(configFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
@@ -1112,260 +1458,63 @@ int main()
                     CloseHandle(hThread);
                 }
             }
-        }
 
-        if (config.VerboseDebug && config.Injector)
-        {
-            MessageBox(NULL, L"Verified injector.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        if (config.Injector)
-        {
-            CONSOLE_MESSAGE(L"Injector check.");
-        }
-
-        if (config.LAAPatch && Is32BitApplication(APP_NAME))
-        {
-            if (!config.IsUnsafe)
+            if (config.VerboseDebug && config.Injector)
             {
-                if (!IsLargeAddressAware(APP_NAME))
-                {
-                    int msgboxID = MessageBox(NULL, L"DOW2.exe is not large address aware, meaning it won't allocate more than 2gb of address space, which is not enough for this mod. Would you like to apply the large address aware patch?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                    if (msgboxID == IDYES)
-                    {
-                        if (!ApplyLargeAddressAwarePatch(APP_NAME))
-                        {
-                            MessageBox(NULL, L"Failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
-                        }
-                    }
-                }
+                MessageBox(NULL, L"Verified injector.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
-        }
 
-        if (config.VerboseDebug && config.LAAPatch)
-        {
-            MessageBox(NULL, L"Verified large address aware.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        if (config.LAAPatch)
-        {
-            CONSOLE_MESSAGE(L"Large address aware check.");
-        }
-
-        // check for a vulkan-capable GPU if DXVK is true
-        if (config.IsDXVK && !HasVulkanSupport())
-        {
-            if (!config.IsUnsafe)
+            if (config.Injector)
             {
-                MessageBox(NULL, L"No Vulkan capable GPU detected by the launcher, the game will likely not run with DXVK, which is required for this mod.", L"Warning", MB_OK | MB_ICONWARNING);
+                CONSOLE_MESSAGE(L"Injector check.");
             }
-        }
 
-        // check for a GPU
-        if (!config.IsDXVK && !HasGPU())
-        {
-            if (!config.IsUnsafe)
+            // check if the .module file exists in the same directory
+            if (GetFileAttributes(moduleFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
             {
-                MessageBox(NULL, L"No GPU detected by the launcher, the game will likely not run.", L"Warning", MB_OK | MB_ICONWARNING);
+                MessageBox(NULL, (L"Failed to find the mod's " + moduleFileName + L" module file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+                return 1;
             }
-        }
 
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Verified GPU.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
+            if (config.VerboseDebug)
+            {
+                MessageBox(NULL, L"Found module file.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
 
-        CONSOLE_MESSAGE(L"GPU check.");
-
-        // call the UCS file validation function
-        if (!ValidateUCSFiles(rootDir, config))
-        {
-            if (!config.IsUnsafe)
+            if (!CheckModuleFile(moduleFileName, config))
             {
                 return 1;
             }
-        }
 
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Verified UCS files.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        CONSOLE_MESSAGE(L"UCS check.");
-
-        // check for ChaosRisingGDF.dll if IsRetribution is true
-        if (config.IsRetribution && GetFileAttributes(L"ChaosRisingGDF.dll") != INVALID_FILE_ATTRIBUTES)
-        {
-            if (!config.IsUnsafe)
+            if (config.VerboseDebug)
             {
-                MessageBox(NULL, L"Found ChaosRisingGDF.dll; this may be Dawn of War II - Chaos Rising, but this mod is for Dawn of War II - Retribution. Install the mod to Dawn of War II - Retribution.", L"Error", MB_OK | MB_ICONERROR);
+                MessageBox(NULL, L"Verified module contents.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
+            CONSOLE_MESSAGE(L"Module check.");
+
+            // call the UCS file validation function
+            if (!ValidateUCSFiles(rootDir, config))
+            {
                 return 1;
             }
-        }
 
-        // check for CGalaxy.dll if IsSteam is true
-        if (config.IsSteam && GetFileAttributes(L"CGalaxy.dll") != INVALID_FILE_ATTRIBUTES)
-        {
-            if (!config.IsUnsafe)
+            if (config.VerboseDebug)
             {
-                MessageBox(NULL, L"Found CGalaxy.dll; this may be a GOG distribution of the game, but this version of the mod is designed for the Steam distribution of the game. Install the mod to the Steam version of the game.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
+                MessageBox(NULL, L"Verified UCS files.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
-        }
 
-        if (!config.IsRetribution && GetFileAttributes(L"ChaosRisingGDF.dll") == INVALID_FILE_ATTRIBUTES)
-        {
-            if (!config.IsUnsafe)
+            CONSOLE_MESSAGE(L"UCS check.");
+
+            if (config.VerboseDebug)
             {
-                MessageBox(NULL, L"The ChaosRisingGDF.dll file is missing, but this mod is designed for Dawn of War II - Chaos Rising. Install the mod to Dawn of War II - Chaos Rising.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
+                MessageBox(NULL, L"All checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
+
+            CONSOLE_MESSAGE(L"ALL CHECKS COMPLETE.");
         }
 
-        // check for CGalaxy.dll if IsSteam is false and file does not exist
-        if (!config.IsSteam && GetFileAttributes(L"CGalaxy.dll") == INVALID_FILE_ATTRIBUTES)
-        {
-            if (!config.IsUnsafe)
-            {
-                MessageBox(NULL, L"The CGalaxy.dll file is missing, but this mod is designed for the GOG distribution of the game. Install the mod to the GOG distribution of the game.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
-            }
-        }
-
-        // check GameVersion field entry against DOW2.exe file version
-        if (!config.GameVersion.empty())
-        {
-            if (!config.IsUnsafe)
-            {
-                std::map<std::wstring, std::wstring> versionStrings = GetFileVersionStrings(APP_NAME, config.VerboseDebug);
-                if (versionStrings[L"FileVersion"] != config.GameVersion) {
-                    MessageBox(NULL, (L"File version of DOW2.exe does not match the supported version of the game. Your gameplay experience may be altered, or the mod will not work. Expected: " + config.GameVersion + L", Found: " + versionStrings[L"FileVersion"]).c_str(), L"Warning", MB_OK | MB_ICONWARNING);
-                    if (config.VerboseDebug)
-                    {
-                        std::wstring debugMessage = L"DOW2.exe version info:\n";
-                        for (const auto& pair : versionStrings) {
-                            debugMessage += pair.first + L": " + pair.second + L"\n";
-                        }
-                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
-                }
-            }
-        }
-
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"Verified version.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        CONSOLE_MESSAGE(L"Version check.");
-
-        // check for dxvk
-        if (config.IsDXVK)
-        {
-            if (!config.IsUnsafe)
-            {
-                bool d3d9Missing = false;
-                bool dxvkConfMissing = false;
-
-                if (GetFileAttributes(L"d3d9.dll") == INVALID_FILE_ATTRIBUTES) {
-                    d3d9Missing = true;
-                }
-
-                if (GetFileAttributes(L"dxvk.conf") == INVALID_FILE_ATTRIBUTES) {
-                    dxvkConfMissing = true;
-                }
-
-                if (d3d9Missing)
-                {
-                    int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch the mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                    if (msgboxID == IDYES)
-                    {
-                        CopyFileRaw(L"d3d9.bin", L"d3d9.dll");
-                        if (dxvkConfMissing)
-                        {
-                            std::ofstream dxvkConfFile("dxvk.conf");
-                            dxvkConfFile << "dxgi.maxFrameRate = 60\n";
-                            dxvkConfFile << "d3d9.maxFrameRate = 60\n";
-                            dxvkConfFile.close();
-                        }
-                    }
-                }
-                else
-                {
-                    auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
-
-                    if (config.VerboseDebug) {
-                        std::wstring debugMessage = L"d3d9.dll version info:\n";
-                        for (const auto& pair : versionStrings) {
-                            debugMessage += pair.first + L": " + pair.second + L"\n";
-                        }
-                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
-
-                    if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] != L"DXVK") {
-                        int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                        if (msgboxID == IDYES)
-                        {
-                            CopyFileRaw(L"d3d9.bin", L"d3d9.dll");
-                        }
-                    }
-                    else if (dxvkConfMissing)
-                    {
-                        int msgboxID = MessageBox(NULL, L"The dxvk.conf file for DXVK is missing. Would you like to acquire it?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                        if (msgboxID == IDYES)
-                        {
-                            std::ofstream dxvkConfFile("dxvk.conf");
-                            dxvkConfFile << "dxgi.maxFrameRate = 60\n";
-                            dxvkConfFile << "d3d9.maxFrameRate = 60\n";
-                            dxvkConfFile.close();
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            if (!config.IsUnsafe)
-            {
-                auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
-
-                if (config.VerboseDebug) {
-                    std::wstring debugMessage = L"d3d9.dll version info:\n";
-                    for (const auto& pair : versionStrings)
-                    {
-                        debugMessage += pair.first + L": " + pair.second + L"\n";
-                    }
-                    MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                }
-
-                if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK") {
-                    int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                    if (msgboxID == IDYES)
-                    {
-                        DeleteFile(L"d3d9.dll");
-                        DeleteFile(L"dxvk.conf");
-                    }
-                }
-            }
-        }
-
-        if (config.VerboseDebug && config.IsDXVK)
-        {
-            MessageBox(NULL, L"Verified DXVK.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        if (config.IsDXVK)
-        {
-            CONSOLE_MESSAGE(L"DXVK check.");
-        }
-
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, L"All checks complete. Preparing to launch the game.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
-        CONSOLE_MESSAGE(L"ALL CHECKS COMPLETE.");
-
+        // END CHECKS
         // launch the game
         std::wstring commandLine = std::wstring(APP_NAME) + L" -modname " + modName + L" " + config.LaunchParams;
 
@@ -1384,13 +1533,81 @@ int main()
 
         CONSOLE_MESSAGE(L"DOW2.exe executed.");
 
-        // start the monitoring thread after a time
-        Sleep(15000);
-        std::thread monitorThread(MonitorAndSetPriority);
-        monitorThread.detach();
+        bool dow2_running = false;
+
+        // loop until the program is found running
+        while (!dow2_running) 
+        {
+            dow2_running = IsProcessRunning(APP_NAME);
+            if (!dow2_running) 
+            {
+                Sleep(1000);
+            }
+        }
+
+        if (dow2_running)
+        {
+            if (!config.IsUnsafe)
+            {
+                DWORD dow2ProcessId = 0;
+                HWND mainWindowHandle = NULL;
+
+                while (true)
+                {
+                    dow2ProcessId = FindProcessId(APP_NAME);
+                    mainWindowHandle = GetMainWindowHandle(dow2ProcessId);
+                    if (dow2ProcessId != 0 && mainWindowHandle != NULL)
+                    {
+                        break;
+                    }
+                    Sleep(1000);
+                }
+
+                std::thread monitorThread(MonitorAndSetPriority);
+                monitorThread.detach();
+
+                std::string rawCommandLine = GetCommandLineOfProcess(dow2ProcessId);
+                std::string actualCommandLine = StripExecutablePath(rawCommandLine);
+                std::string expectedCommandLine = WStringToString(commandLine);
+
+                // trim whitespace
+                actualCommandLine = TrimString(actualCommandLine);
+                expectedCommandLine = TrimString(expectedCommandLine);
+
+                // normalize command lines (convert to lowercase and remove extra spaces)
+                actualCommandLine = NormalizeCommandLine(actualCommandLine);
+                expectedCommandLine = NormalizeCommandLine(expectedCommandLine);
+
+                // ensure both are trimmed again to remove any leading/trailing spaces
+                actualCommandLine = TrimString(actualCommandLine);
+                expectedCommandLine = TrimString(expectedCommandLine);
+
+                if (config.VerboseDebug)
+                {
+                    std::cout << "Raw actual command line: " << rawCommandLine << std::endl;
+                    std::cout << "Processed actual command line: " << actualCommandLine << std::endl;
+                    std::cout << "Expected command line: " << expectedCommandLine << std::endl;
+                }
+
+                // convert strings to wstrings for comparison and MessageBox
+                std::wstring actualCommandLineW = StringToWString(actualCommandLine);
+                std::wstring expectedCommandLineW = StringToWString(expectedCommandLine);
+
+                if (actualCommandLineW != expectedCommandLineW)
+                {
+                    SuspendProcess(dow2ProcessId);
+                    std::wstring warningMessage = L"DOW2.exe was launched with externally set launch parameters. If this is unintentional, make sure that you do not have extra launch parameters set through Steam, GOG, the runoptions.cfg file, or other means.\n\n";
+                    warningMessage += L"Expected Launch Parameters: " + expectedCommandLineW + L"\n";
+                    warningMessage += L"Actual Launch Parameters: " + actualCommandLineW;
+                    MessageBox(NULL, warningMessage.c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+                    ResumeProcess(dow2ProcessId);
+                    ForceFocusOnWindow(mainWindowHandle);
+                }
+            }
+        }
 
         // wait for a time before closing the launcher
-        Sleep(30000);
+        Sleep(15000);
 
         // destroy the bitmap window after waiting
         if (hwndBitmap)
@@ -1402,6 +1619,7 @@ int main()
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
     }
+
     if (isLinux)
     {
         // get the executable path using Boost.DLL
@@ -1429,12 +1647,20 @@ int main()
             if (c.exit_code() != 0)
             {
                 std::cerr << "Failed to find or open DOW2.exe. You have installed the mod into the wrong directory, or your game is missing or corrupt. Install the mod into the correct game directory, or try again." << std::endl;
+                std::cerr << "Press [Enter] to exit..." << std::endl;
+                std::cin.get();
                 return 1;
             }
+
+            // close the launcher after DOW2.exe has finished executing
+            std::cout << "DOW2.exe executed." << std::endl;
+            return 0;
         }
         catch (const std::exception& e) 
         {
             std::cerr << "Error: " << e.what() << std::endl;
+            std::cerr << "Press [Enter] to exit..." << std::endl;
+            std::cin.get();
             return 1;
         }
     }

@@ -2,8 +2,6 @@
 
 #pragma once
 #pragma comment(lib, "Version.lib")
-#pragma comment(lib, "d3d9.lib")
-#pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "vulkan-1.lib")
 
 #define WIN32_LEAN_AND_MEAN
@@ -30,14 +28,15 @@
 #include <codecvt>
 #include <locale>
 #include <unordered_map>
-#include <d3d9.h>
-#include <dxgi.h>
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <sys/stat.h>
-#include <mutex>
+#include <shlobj.h>
+#include <cwctype>
+#include <iomanip>
+#include <psapi.h>
 #include <boost/process.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
 #include <boost/interprocess/exceptions.hpp>
@@ -48,6 +47,8 @@
 #include <boost/predef/os.h>
 
 #include "vulkan/vulkan.h"
+
+namespace bp = boost::process;
 
 
 
@@ -97,6 +98,87 @@ HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bit
     UpdateWindow(hwnd);
 
     return hwnd;
+}
+
+// function to get the command line of a process
+std::string GetCommandLineOfProcess(DWORD processID) 
+{
+    std::string commandLine;
+    boost::process::ipstream pipe_stream;
+    boost::process::child c("wmic process where processid=" + std::to_string(processID) + " get CommandLine", boost::process::std_out > pipe_stream);
+
+    std::string line;
+    while (pipe_stream && std::getline(pipe_stream, line) && !line.empty()) 
+    {
+        if (line.find("CommandLine") == std::string::npos) // skip the header
+        {
+            commandLine += line;
+        }
+    }
+
+    c.wait();
+
+    return commandLine;
+}
+
+// function to find a process ID
+DWORD FindProcessId(const std::wstring& processName) 
+{
+    PROCESSENTRY32 processInfo;
+    processInfo.dwSize = sizeof(processInfo);
+
+    HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hProcessSnap == INVALID_HANDLE_VALUE) return 0;
+
+    Process32First(hProcessSnap, &processInfo);
+    if (!processName.compare(processInfo.szExeFile)) 
+    {
+        CloseHandle(hProcessSnap);
+        return processInfo.th32ProcessID;
+    }
+
+    while (Process32Next(hProcessSnap, &processInfo)) 
+    {
+        if (!processName.compare(processInfo.szExeFile)) 
+        {
+            CloseHandle(hProcessSnap);
+            return processInfo.th32ProcessID;
+        }
+    }
+
+    CloseHandle(hProcessSnap);
+    return 0;
+}
+
+// function to strip the executable path from a string
+std::string StripExecutablePath(const std::string& commandLine) 
+{
+    size_t pos = commandLine.find_last_of("\\/");
+    std::string fileName;
+    if (pos != std::string::npos) 
+    {
+        fileName = commandLine.substr(pos + 1);
+    }
+    else 
+    {
+        fileName = commandLine;
+    }
+
+    // remove all quotation marks from the resulting string
+    fileName.erase(std::remove(fileName.begin(), fileName.end(), '"'), fileName.end());
+
+    return fileName;
+}
+
+// function to normalize command line
+std::string NormalizeCommandLine(const std::string& commandLine)
+{
+    std::string normalized = commandLine;
+    // convert to lower case
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), ::tolower);
+    // remove extra spaces
+    normalized.erase(std::unique(normalized.begin(), normalized.end(), [](char a, char b) { return std::isspace(a) && std::isspace(b); }), normalized.end());
+    return normalized;
 }
 
 // function to calculate the MD5 checksum of a file
@@ -154,6 +236,14 @@ bool CalculateMD5(const wchar_t* filepath, std::string& md5String)
     CloseHandle(hFile);
 
     return true;
+}
+
+// function to check core count
+int GetProcessorCoreCount() 
+{
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return sysinfo.dwNumberOfProcessors;
 }
 
 // function to check if a process is running
@@ -268,6 +358,25 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
         return versionInfoStrings;
     }
 
+    // retrieve the specific version info
+    VS_FIXEDFILEINFO* pFileInfo = nullptr;
+    UINT fileInfoSize = 0;
+    if (VerQueryValueW(buffer.data(), L"\\", (LPVOID*)&pFileInfo, &fileInfoSize))
+    {
+        if (fileInfoSize)
+        {
+            versionInfoStrings[L"FileVersion"] = std::to_wstring((pFileInfo->dwFileVersionMS >> 16) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwFileVersionMS >> 0) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwFileVersionLS >> 16) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwFileVersionLS >> 0) & 0xffff);
+
+            versionInfoStrings[L"ProductVersion"] = std::to_wstring((pFileInfo->dwProductVersionMS >> 16) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwProductVersionMS >> 0) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwProductVersionLS >> 16) & 0xffff) + L"." +
+                std::to_wstring((pFileInfo->dwProductVersionLS >> 0) & 0xffff);
+        }
+    }
+
     void* verData = nullptr;
     UINT verDataLen = 0;
 
@@ -285,7 +394,7 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
             wchar_t subBlock[50];
             swprintf_s(subBlock, 50, L"\\StringFileInfo\\%04x%04x\\", lpTranslate[i].wLanguage, lpTranslate[i].wCodePage);
 
-            std::wstring keys[] = { L"ProductName", L"CompanyName", L"FileDescription", L"FileVersion" };
+            std::wstring keys[] = { L"ProductName", L"CompanyName", L"FileDescription", L"InternalName", L"OriginalFilename", L"LegalCopyright" };
 
             for (const auto& key : keys) {
                 if (VerQueryValueW(buffer.data(), (std::wstring(subBlock) + key).c_str(), &verData, &verDataLen)) 
@@ -342,37 +451,6 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType)
     default:
         return FALSE;
     }
-}
-
-// function to check if a dedicated gpu is present
-bool HasGPU()
-{
-    IDXGIFactory* pFactory = nullptr;
-    if (FAILED(CreateDXGIFactory(__uuidof(IDXGIFactory), (void**)&pFactory)))
-    {
-        return false;
-    }
-
-    IDXGIAdapter* pAdapter = nullptr;
-    bool hasGPU = false;
-
-    for (UINT i = 0; pFactory->EnumAdapters(i, &pAdapter) != DXGI_ERROR_NOT_FOUND; ++i)
-    {
-        DXGI_ADAPTER_DESC desc;
-        pAdapter->GetDesc(&desc);
-
-        // check for any GPU, whether it's dedicated or integrated
-        if (desc.DedicatedVideoMemory > 0 || desc.SharedSystemMemory > 0)
-        {
-            hasGPU = true;
-            pAdapter->Release();
-            break;
-        }
-        pAdapter->Release();
-    }
-
-    pFactory->Release();
-    return hasGPU;
 }
 
 // function to query "bitness"
@@ -458,6 +536,118 @@ bool ApplyLargeAddressAwarePatch(const std::wstring& filePath)
     return true;
 }
 
+// function to suspend a process
+void SuspendProcess(DWORD processId)
+{
+    HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hThreadSnapshot != INVALID_HANDLE_VALUE)
+    {
+        THREADENTRY32 threadEntry = { 0 };
+        threadEntry.dwSize = sizeof(THREADENTRY32);
+        if (Thread32First(hThreadSnapshot, &threadEntry))
+        {
+            do
+            {
+                if (threadEntry.th32OwnerProcessID == processId)
+                {
+                    HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, threadEntry.th32ThreadID);
+                    if (hThread != NULL)
+                    {
+                        SuspendThread(hThread);
+                        CloseHandle(hThread);
+                    }
+                }
+            } while (Thread32Next(hThreadSnapshot, &threadEntry));
+        }
+        CloseHandle(hThreadSnapshot);
+    }
+}
+
+// function to resume a process
+void ResumeProcess(DWORD processId)
+{
+    HANDLE hThreadSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hThreadSnapshot != INVALID_HANDLE_VALUE)
+    {
+        THREADENTRY32 threadEntry = { 0 };
+        threadEntry.dwSize = sizeof(THREADENTRY32);
+        if (Thread32First(hThreadSnapshot, &threadEntry))
+        {
+            do
+            {
+                if (threadEntry.th32OwnerProcessID == processId)
+                {
+                    HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, threadEntry.th32ThreadID);
+                    if (hThread != NULL)
+                    {
+                        ResumeThread(hThread);
+                        CloseHandle(hThread);
+                    }
+                }
+            } while (Thread32Next(hThreadSnapshot, &threadEntry));
+        }
+        CloseHandle(hThreadSnapshot);
+    }
+}
+
+struct WindowInfo
+{
+    DWORD processId;
+    HWND hwnd;
+};
+
+// function to enumerate windows process
+BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lParam)
+{
+    DWORD wndProcessId;
+    GetWindowThreadProcessId(hwnd, &wndProcessId);
+
+    if (wndProcessId == reinterpret_cast<WindowInfo*>(lParam)->processId)
+    {
+        WCHAR windowTitle[256];
+        GetWindowText(hwnd, windowTitle, sizeof(windowTitle) / sizeof(WCHAR));
+        if (wcslen(windowTitle) > 0)
+        {
+            reinterpret_cast<WindowInfo*>(lParam)->hwnd = hwnd;
+            return FALSE; // stop enumeration
+        }
+    }
+    return TRUE; // continue enumeration
+}
+
+HWND GetMainWindowHandle(DWORD processId)
+{
+    WindowInfo info = { processId, NULL };
+    EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&info));
+    return info.hwnd;
+}
+
+// function to force focus on the window
+void ForceFocusOnWindow(HWND hwnd)
+{
+    // check if the window handle is valid
+    if (hwnd == NULL)
+    {
+        return;
+    }
+
+    // bring the window to the foreground
+    SetForegroundWindow(hwnd);
+
+    // show the window if it is minimized or hidden
+    if (IsIconic(hwnd) || !IsWindowVisible(hwnd))
+    {
+        ShowWindow(hwnd, SW_RESTORE);
+    }
+    else
+    {
+        ShowWindow(hwnd, SW_SHOW);
+    }
+
+    // set the focus to the window
+    SetFocus(hwnd);
+}
+
 
 
 //
@@ -483,8 +673,6 @@ std::string get_current_process_name()
 // function to check if a process with the given name is already running
 bool is_process_running(const std::string& process_name) 
 {
-    namespace bp = boost::process;
-
     // determine which command to use based on the platform
     std::string command = bp::search_path("tasklist").string();
     std::vector<std::string> args;
@@ -557,13 +745,23 @@ bool HasVulkanSupport()
     return deviceCount > 0;
 }
 
-// helper function to trim whitespace from a string
-std::wstring Trim(const std::wstring& str)
+// helper function to trim whitespace from a wide string
+std::wstring TrimWString(const std::wstring& str)
 {
     size_t first = str.find_first_not_of(L' ');
     if (first == std::wstring::npos)
         return L"";
     size_t last = str.find_last_not_of(L' ');
+    return str.substr(first, last - first + 1);
+}
+
+// helper function to trim whitespace from a string
+std::string TrimString(const std::string& str)
+{
+    size_t first = str.find_first_not_of(' ');
+    if (first == std::string::npos)
+        return "";
+    size_t last = str.find_last_not_of(' ');
     return str.substr(first, last - first + 1);
 }
 
@@ -606,24 +804,26 @@ bool ValidateIntegerField(const std::wstring& value)
 }
 
 // function to check if we're running on Windows
-bool RunningOnWindows() {
+bool RunningOnWindows() 
+{
     return BOOST_OS_WINDOWS;
 }
 
 // function to check if we're running on Linux
-bool RunningOnLinux() {
+bool RunningOnLinux() 
+{
     return BOOST_OS_LINUX;
-}
-
-// function to check if we're running on Mac
-bool RunningOnMac() {
-    return BOOST_OS_MACOS;
 }
 
 // function to convert wide string to string
 std::string WStringToString(const std::wstring& wstr) 
 {
     return boost::locale::conv::utf_to_utf<char>(wstr);
+}
+
+// function to convert string to wide string
+std::wstring StringToWString(const std::string& str) {
+    return boost::locale::conv::utf_to_utf<wchar_t>(str);
 }
 
 // function to copy raw data from source to destination
@@ -641,4 +841,10 @@ bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePat
         std::cerr << e.what() << std::endl;
         return false;
     }
+}
+
+// function to verify 16:9 aspect ratio
+bool CheckAspectRatio(int width, int height) 
+{
+    return (width * 9 == height * 16);
 }
