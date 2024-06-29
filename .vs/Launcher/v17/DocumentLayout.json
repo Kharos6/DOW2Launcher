@@ -72,9 +72,10 @@
               "RelativeDocumentMoniker": "Launcher\\framework.h",
               "ToolTip": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\framework.h",
               "RelativeToolTip": "Launcher\\framework.h",
-              "ViewState": "AQIAADgCAAAAAAAAAAAkwFQCAAACAAAA",
+              "ViewState": "AQIAAJwAAAAAAAAAAAAAAK4AAAAbAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000680|",
-              "WhenOpened": "2024-06-21T22:14:20.691Z"
+              "WhenOpened": "2024-06-21T22:14:20.691Z",
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
@@ -84,7 +85,7 @@
               "RelativeDocumentMoniker": "Launcher\\main.cpp",
               "ToolTip": "G:\\DOW2_MODDING\\Source\\DOW2Launcher\\Launcher\\main.cpp",
               "RelativeToolTip": "Launcher\\main.cpp",
-              "ViewState": "AQIAANcBAAAAAAAAAAAAACoFAABAAAAA",
+              "ViewState": "AQIAAK8EAAAAAAAAAAAAAOAEAABbAAAA",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000677|",
               "WhenOpened": "2024-06-18T05:20:41.896Z",
               "EditorCaption": ""

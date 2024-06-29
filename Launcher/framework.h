@@ -12,6 +12,7 @@
         std::wcout << msg << std::endl; \
     }
 
+// external includes
 #include <windows.h>
 #include <tlhelp32.h>
 #include <thread>
@@ -46,6 +47,7 @@
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/predef/os.h>
 
+// local includes
 #include "vulkan/vulkan.h"
 
 namespace bp = boost::process;
@@ -170,7 +172,7 @@ std::string StripExecutablePath(const std::string& commandLine)
     return fileName;
 }
 
-// function to normalize command line
+// function to normalize a command line
 std::string NormalizeCommandLine(const std::string& commandLine)
 {
     std::string normalized = commandLine;
@@ -331,7 +333,7 @@ void MonitorAndSetPriority()
 }
 
 // function to get the string file info from a file's version info
-std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& filePath, bool verboseDebug)
+std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& filePath)
 {
     std::map<std::wstring, std::wstring> versionInfoStrings;
     DWORD dummy = 0;
@@ -340,10 +342,6 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     if (size == 0) 
     {
         versionInfoStrings[L"Error"] = L"GetFileVersionInfoSizeW failed";
-        if (verboseDebug) 
-        {
-            MessageBox(NULL, L"GetFileVersionInfoSizeW failed", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
         return versionInfoStrings;
     }
 
@@ -351,10 +349,6 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     if (!GetFileVersionInfoW(filePath.c_str(), 0, size, buffer.data())) 
     {
         versionInfoStrings[L"Error"] = L"GetFileVersionInfoW failed";
-        if (verboseDebug) 
-        {
-            MessageBox(NULL, L"GetFileVersionInfoW failed", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
         return versionInfoStrings;
     }
 
@@ -400,16 +394,6 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
                 if (VerQueryValueW(buffer.data(), (std::wstring(subBlock) + key).c_str(), &verData, &verDataLen)) 
                 {
                     versionInfoStrings[key] = std::wstring(static_cast<wchar_t*>(verData));
-                    if (verboseDebug) 
-                    {
-                        MessageBox(NULL, (L"Found " + key + L": " + versionInfoStrings[key]).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
-                }
-                else {
-                    if (verboseDebug) 
-                    {
-                        MessageBox(NULL, (L"VerQueryValueW failed for " + key).c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
                 }
             }
         }
@@ -417,10 +401,6 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
     else 
     {
         versionInfoStrings[L"Error"] = L"VerQueryValueW for Translation failed";
-        if (verboseDebug) 
-        {
-            MessageBox(NULL, L"VerQueryValueW for Translation failed", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
     }
     return versionInfoStrings;
 }
@@ -784,10 +764,10 @@ bool ValidateLaunchParams(const std::wstring& launchParams)
 }
 
 // function to validate file name field formatting
-bool ValidateFileName(const std::wstring& injectorFileName)
+bool ValidateFileName(const std::wstring& fileName)
 {
-    size_t pos = injectorFileName.find(L".");
-    return (pos != std::wstring::npos) && (pos < injectorFileName.length() - 1);
+    size_t pos = fileName.find(L".");
+    return (pos != std::wstring::npos) && (pos < fileName.length() - 1);
 }
 
 // function to validate boolean fields

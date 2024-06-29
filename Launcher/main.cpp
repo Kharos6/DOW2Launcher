@@ -537,7 +537,7 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
         std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);
         if (!outFile.is_open())
         {
-            MessageBox(NULL, (L"Failed to find or open UCS file for writing. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
+            MessageBox(NULL, (L"Failed to find or open faulty UCS file. Try again, or reacquire it from the mod package: " + filePath).c_str(), L"Error", MB_OK | MB_ICONERROR);
             return false;
         }
 
@@ -1079,7 +1079,7 @@ int main()
             // check GameVersion field entry against DOW2.exe file version
             if (!config.GameVersion.empty())
             {
-                std::map<std::wstring, std::wstring> versionStrings = GetFileVersionStrings(APP_NAME, config.VerboseDebug);
+                std::map<std::wstring, std::wstring> versionStrings = GetFileVersionStrings(APP_NAME);
                 if (versionStrings[L"FileVersion"] != config.GameVersion) {
                     MessageBox(NULL, (L"File version of DOW2.exe does not match the supported version of the game. Your gameplay experience may be altered, or the mod may not work. Expected: " + config.GameVersion + L", Found: " + versionStrings[L"FileVersion"]).c_str(), L"Warning", MB_OK | MB_ICONWARNING);
                     if (config.VerboseDebug)
@@ -1209,7 +1209,7 @@ int main()
                 }
                 else
                 {
-                    auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+                    auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
 
                     if (config.VerboseDebug)
                     {
@@ -1246,8 +1246,7 @@ int main()
                         std::ofstream dxvkConfFile("dxvk.conf");
                         if (!dxvkConfFile)
                         {
-                            MessageBox(NULL, L"Failed to create the dxvk.conf file. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                            return 1;
+                            MessageBox(NULL, L"Failed to create the dxvk.conf file for DXVK. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
                         }
                         dxvkConfFile << "dxgi.maxFrameRate = 60\n";
                         dxvkConfFile << "d3d9.maxFrameRate = 60\n";
@@ -1257,7 +1256,7 @@ int main()
             }
             else
             {
-                auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+                auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
 
                 if (config.VerboseDebug)
                 {
@@ -1282,7 +1281,7 @@ int main()
             // additional checks for DXVK and Injector
             if (config.IsDXVK && config.Injector && d3d9IsDXVK)
             {
-                auto versionStrings = GetFileVersionStrings(L"d3d9.dll", config.VerboseDebug);
+                auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
                 if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
                 {
                     struct FileCheck
@@ -1315,6 +1314,7 @@ int main()
                                         std::wstringstream errorMessage;
                                         errorMessage << L"The DXVK and injector combination requires special DIVX files in order to allow for movies to play correctly, but we failed to create or replace the " << file.fileName << L" file with the correct version. The " << binFilePath << L" file may be missing. Reacquire it from the mod package, or try again.";
                                         MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                        return 1;
                                     }
                                 }
                             }
@@ -1347,7 +1347,7 @@ int main()
                 {
                     if (!ApplyLargeAddressAwarePatch(APP_NAME))
                     {
-                        MessageBox(NULL, L"This mod requires DOW2.exe to be large address aware and allocate more than 2gb of address space, but we failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
+                        MessageBox(NULL, L"This mod requests DOW2.exe to be large address aware and allocate more than 2gb of address space, but we failed to apply the large address aware patch to DOW2.exe. While the mod will still proceed to launch, you may crash in large scenarios. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
                     }
                 }
             }
@@ -1581,7 +1581,7 @@ int main()
         }
 
         // wait for a time before closing the launcher
-        Sleep(15000);
+        Sleep(30000);
 
         // destroy the bitmap window after waiting
         if (hwndBitmap)

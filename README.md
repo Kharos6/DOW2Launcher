@@ -73,7 +73,7 @@
 
 - If the user tries to close the injector before it finishes its operations, a warning is displayed, advising against doing so, but giving the option to proceed or exit.
 
-- If any .ucs files have incorrect formatting or non-number entries, a warning is displayed and the entire process is aborted. Additionally, if a .ucs file is not UTF-16 LE, an attempt will be made to convert the file to UTF-16 LE. If this attempt fails, a warning is displayed and the entire process is aborted.
+- If any .ucs files have incorrect formatting, or non-number entries, a warning is displayed and the entire process is aborted. Additionally, if a .ucs file is not UTF-16 LE, an attempt will be made to convert the file to UTF-16 LE. If this attempt fails, a warning is displayed and the entire process is aborted.
 
 - If there are no files under the Locale folder, a warning is displayed and the entire process is aborted.
 
@@ -83,13 +83,13 @@
 
 - Compatibility with Linux, though currently severely limited in functionality.
 
-- Various minor failsafes for specific failed operations.
+- Various failsafes and warnings for failed operations.
 
 - A console window that appears if a .bmp file doesn't exist.
 
 - Timeout after 30 seconds following the launch of the game in order to avoid hogging up resources or causing other issues.
 
-- Timeout starting after 15 seconds that checks if DOW2.exe is closed while the launcher is running.
+- Timeout starting after the game launches that checks if DOW2.exe is closed while the launcher is running.
 
 - Absolute timeout after 60 seconds of launcher execution in order to avoid hogging up resources or causing other issues.
 
