@@ -26,6 +26,8 @@
 
 - Optionally, set the [LAAPatch] field of the .launchconfig file to true if your mod requires DOW2.exe to be large address aware.
 
+- Optionally, set the [UIWarnings] field of the .launchconfig file to true if your mod makes UI modifications that require the uiscale to be set to 100, and resolution to be of the 16:9 aspect ratio.
+
 - Optionally, if you want a splash screen, create a .bmp file with your desired artwork and resolution, and change its name to match the name of your mod's .module file, then change the [BitmapWidth] and [BitmapHeight] fields of the .launchconfig file to match its resolution. Those fields can remain at any number value if you are not using a splash screen.
 
 - If you wish to receive detailed debug messages, set the [VerboseDebug] field of the .launchconfig file to true.
@@ -64,6 +66,8 @@
 - If the [IsDXVK] field of the .launchconfig file is set to false, and the d3d9.dll file specific to DXVK is present, a warning is displayed, and the user can either delete DXVK or continue with the launch.
 
 - If the [LAAPatch] field of the .launchconfig file is set to true, a warning is displayed, and the user can either set DOW2.exe to be large address aware, or continue with the launch.
+
+- If the [UIWarnings] field of the .launchconfig file is set to true, and the user has their game settings using a ui scale lesser than 100, and an aspect ratio that is not 16:9, a warning is displayed, but the process continues.
 
 - If the [GameVersion] field of the .launchconfig file is populated, and the DOW2.exe file version doesn't match it, a warning is displayed, but the process continues.
 
