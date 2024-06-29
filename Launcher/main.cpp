@@ -6,8 +6,6 @@
 struct LaunchConfig
 {
     bool Injector = false;
-    std::string ExpectedInjectorFileMD5Checksum;
-    std::string ExpectedXThreadFileMD5Checksum;
     std::wstring LaunchParams;
     int BitmapWidth = 600;  // default width
     int BitmapHeight = 300; // default height
@@ -89,7 +87,7 @@ LaunchConfig ReadLaunchConfig()
     std::wstring line;
     std::set<std::wstring> requiredKeys = 
     {
-        L"Injector", L"ExpectedInjectorFileMD5Checksum", L"ExpectedXThreadFileMD5Checksum", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch", L"UIWarnings"
+        L"Injector", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch", L"UIWarnings"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -113,20 +111,6 @@ LaunchConfig ReadLaunchConfig()
                 exit(1);
             }
             config.Injector = (value == L"true");
-        }
-        else if (key == L"ExpectedInjectorFileMD5Checksum")
-        {
-            if (config.Injector)
-            {
-                config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
-            }
-        }
-        else if (key == L"ExpectedXThreadFileMD5Checksum")
-        {
-            if (!config.Injector)
-            {
-                config.ExpectedInjectorFileMD5Checksum = WStringToString(value);
-            }
         }
         else if (key == L"BitmapWidth")
         {
@@ -420,8 +404,6 @@ void WriteLaunchConfig(const LaunchConfig& config)
         }
     }
     configFile << L"\n";
-    configFile << L"ExpectedInjectorFileMD5Checksum=" << std::wstring(config.ExpectedInjectorFileMD5Checksum.begin(), config.ExpectedInjectorFileMD5Checksum.end()) << L"\n";
-    configFile << L"ExpectedXThreadFileMD5Checksum=" << std::wstring(config.ExpectedXThreadFileMD5Checksum.begin(), config.ExpectedXThreadFileMD5Checksum.end()) << L"\n";
     configFile << L"FirstTimeLaunchCheck=" << (config.FirstTimeLaunchCheck ? L"true" : L"false") << L"\n";
     configFile << L"FirstTimeLaunchMessage=" << config.FirstTimeLaunchMessage << L"\n";
     configFile << L"VerboseDebug=" << (config.VerboseDebug ? L"true" : L"false") << L"\n";
@@ -463,34 +445,43 @@ std::wstring ReadModFolderFromConfig(const std::wstring& configFilePath)
 }
 
 // function to handle the binary processing with a timeout
-DWORD WINAPI InjectorBinaryProcessingThread(LPVOID lpParam)
+DWORD WINAPI InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& launcherName)
 {
-    LaunchConfig* config = (LaunchConfig*)lpParam;
-    std::string actualChecksum;
+    std::string actualChecksum, expectedChecksum;
 
-    if (!CalculateMD5(config->InjectorFileName.c_str(), actualChecksum) || actualChecksum != config->ExpectedInjectorFileMD5Checksum)
+    // Construct the injector bin file name using the launcher name and _injectorfilename from the configuration
+    std::wstring binFileName = launcherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
+
+    // calculate the expected checksum from the .bin file
+    if (!CalculateMD5(binFileName.c_str(), expectedChecksum))
     {
-        if (config->VerboseDebug) 
-        {
-            MessageBox(NULL, (L"" + config->InjectorFileName + L" file checksum mismatch. Attempting to replace the file with the valid injector version for this mod.").c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
+        std::wstringstream errorMessage;
+        errorMessage << L"Failed to calculate the MD5 checksum of the " << binFileName << L" file in order to validate the injector. The file may be missing. Reacquire it from the mod package, or try again.";
+        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
 
-        std::wstring binFileName = config->InjectorFileName.substr(0, config->InjectorFileName.find_last_of(L".")) + L".bin";
-
-        if (!CopyFileRaw(binFileName, config->InjectorFileName))
+    // calculate the actual checksum of the injector file
+    if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) || actualChecksum != expectedChecksum)
+    {
+        if (!CopyFileRaw(binFileName.c_str(), config.InjectorFileName.c_str()))
         {
-            MessageBox(NULL, (L"Failed to replace the " + config->InjectorFileName + L" file with the valid injector version for this mod. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-            return 1;
+            std::wstringstream errorMessage;
+            errorMessage << L"Failed to replace the " << config.InjectorFileName << L" file with the valid injector version for this mod. The file " << binFileName << L" may be missing. Reacquire it from the mod package, or try again.";
+            MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return false;
         }
 
         // verify the checksum again after replacement
-        if (!CalculateMD5(config->InjectorFileName.c_str(), actualChecksum) || actualChecksum != config->ExpectedInjectorFileMD5Checksum)
+        if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) || actualChecksum != expectedChecksum)
         {
-            MessageBox(NULL, (L"" + config->InjectorFileName + L" file checksum still mismatched after attempted replacement with the valid injector version for this mod. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
-            return 1;
+            std::wstringstream errorMessage;
+            errorMessage << config.InjectorFileName << L" file checksum still mismatched after attempted replacement with the valid injector version for this mod. Reacquire it from the mod package, or try again.";
+            MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+            return false;
         }
     }
-    return 0;
+    return true;
 }
 
 // function to process individual UCS files
@@ -542,11 +533,6 @@ bool ProcessUCSFile(const std::wstring& filePath, const LaunchConfig& config)
 
     if (conversionNeeded)
     {
-        if (config.VerboseDebug)
-        {
-            MessageBox(NULL, (L"This UCS file is not UTF-16 LE: " + filePath + L", attempting conversion.").c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-
         // convert to UTF-16 LE and write back to the file
         std::ofstream outFile(filePath, std::ios::binary | std::ios::trunc);
         if (!outFile.is_open())
@@ -962,6 +948,8 @@ int main()
         std::wstring configFileName = std::wstring(launcherName).substr(0, launcherName.find_last_of(L".")) + L".config";
         std::wstring modName = std::wstring(launcherName).substr(0, launcherName.find_last_of(L"."));
 
+        std::wstring baseLauncherName = std::wstring(launcherName).substr(0, launcherName.find_last_of(L"."));
+
         // define the root directory
         std::wstring rootDir = std::wstring(launcherPath).substr(0, std::wstring(launcherPath).find_last_of(L"\\/"));
 
@@ -1114,28 +1102,34 @@ int main()
 
             int numCores = GetProcessorCoreCount();
 
-            if (numCores > 12 && config.IsSteam && !config.Injector)
+            if (numCores >= 12 && config.IsSteam && !config.Injector)
             {
                 std::wstring dllPath = L"XThread.dll";
-                std::wstring binPath = L"XThread.bin";
-                std::string currentMD5;
+                std::wstring binPath = baseLauncherName + L"_XThread.bin";
+                std::string binMD5, currentMD5;
 
-                if (GetFileAttributes(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                if (CalculateMD5(binPath.c_str(), binMD5))
                 {
-                    if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != config.ExpectedInjectorFileMD5Checksum)
+                    if (GetFileAttributes(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES)
                     {
-                        std::wstringstream warningMessage;
-                        warningMessage << L"Your CPU has more than 12 cores, and DOW2.exe will not launch unless the current XThread.dll file is replaced with an updated version. Would you like to replace the file?";
-                        int msgboxID = MessageBox(NULL, warningMessage.str().c_str(), L"Warning", MB_YESNO | MB_ICONWARNING);
-                        if (msgboxID == IDYES)
+                        if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != binMD5)
                         {
                             if (!CopyFileRaw(binPath, dllPath))
                             {
-                                MessageBox(NULL, L"Failed to create or replace the XThread.dll file with the updated version, the XThread.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                                std::wstringstream errorMessage;
+                                errorMessage << L"Failed to create or replace the XThread.dll file with the updated version that is required for the game to run on CPUs with more than twelve cores. The " << binPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
                                 return 1;
                             }
                         }
                     }
+                }
+                else
+                {
+                    std::wstringstream errorMessage;
+                    errorMessage << L"Failed to calculate the MD5 checksum of the " << binPath << L" file in order to validate XThread.dll. The file may be missing. Reacquire it from the mod package, or try again.";
+                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                    return 1;
                 }
             }
 
@@ -1183,14 +1177,18 @@ int main()
                     dxvkConfMissing = true;
                 }
 
+                std::wstring d3d9BinPath = baseLauncherName + L"_d3d9.bin";
+
                 if (d3d9Missing)
                 {
                     int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch the mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
                     if (msgboxID == IDYES)
                     {
-                        if (!CopyFileRaw(L"d3d9.bin", L"d3d9.dll"))
+                        if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
                         {
-                            MessageBox(NULL, L"Failed to create or replace the d3d9.dll file with the DXVK version, the d3d9.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                            std::wstringstream errorMessage;
+                            errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                            MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
                             return 1;
                         }
                         d3d9IsDXVK = true;
@@ -1228,9 +1226,11 @@ int main()
                         int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
                         if (msgboxID == IDYES)
                         {
-                            if (!CopyFileRaw(L"d3d9.bin", L"d3d9.dll"))
+                            if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
                             {
-                                MessageBox(NULL, L"Failed to create or replace the d3d9.dll file with the DXVK version, the d3d9.bin file may be missing. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                                std::wstringstream errorMessage;
+                                errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
                                 return 1;
                             }
                         }
@@ -1289,29 +1289,41 @@ int main()
                     {
                         std::wstring fileName;
                         std::wstring binFileName;
-                        std::string expectedMD5;
                     };
 
                     FileCheck filesToCheck[] =
                     {
-                        {L"DivxDecoder.dll", L"DivxDecoder.bin", "57e72cae12091dafa29a8e4db8b4f1d1"},
-                        {L"DivxMediaLib.dll", L"DivxMediaLib.bin", "937c646bcd8407aee9de381b947433c8"}
+                        {L"DivxDecoder.dll", L"DivxDecoder.bin"},
+                        {L"DivxMediaLib.dll", L"DivxMediaLib.bin"}
                     };
 
                     for (const auto& file : filesToCheck)
                     {
                         std::wstring filePath = file.fileName;
-                        std::string currentMD5;
+                        std::wstring binFilePath = baseLauncherName + L"_" + file.binFileName;
+                        std::string currentMD5, expectedMD5;
                         if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
                         {
-                            if (CalculateMD5(filePath.c_str(), currentMD5) && currentMD5 != file.expectedMD5)
+                            // calculate the expected MD5 checksum from the .bin file
+                            if (CalculateMD5(binFilePath.c_str(), expectedMD5))
                             {
-                                if (!CopyFileRaw(file.binFileName, file.fileName))
+                                // calculate the current MD5 checksum from the .dll file
+                                if (CalculateMD5(filePath.c_str(), currentMD5) && currentMD5 != expectedMD5)
                                 {
-                                    std::wstringstream errorMessage;
-                                    errorMessage << L"The DXVK and injector combination requires special DIVX files in order to allow for movies to play correctly, but we failed to create or replace the " << file.fileName << L" file with the correct version, the " << file.binFileName << L" file may be missing. Reacquire it from the mod package, or try again.";
-                                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                    if (!CopyFileRaw(binFilePath.c_str(), file.fileName.c_str()))
+                                    {
+                                        std::wstringstream errorMessage;
+                                        errorMessage << L"The DXVK and injector combination requires special DIVX files in order to allow for movies to play correctly, but we failed to create or replace the " << file.fileName << L" file with the correct version. The " << binFilePath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                                        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                    }
                                 }
+                            }
+                            else
+                            {
+                                std::wstringstream errorMessage;
+                                errorMessage << L"Failed to calculate the MD5 checksum of the " << binFilePath << L" file in order to validate the necessary DIVX files for the injector and DXVK combination. The file may be missing. Reacquire it from the mod package, or try again.";
+                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                return 1;
                             }
                         }
                     }
@@ -1327,19 +1339,15 @@ int main()
             {
                 CONSOLE_MESSAGE(L"DXVK check.");
             }
-
-            // check for LAA
+            
+            // check for large address aware
             if (config.LAAPatch && Is32BitApplication(APP_NAME))
             {
                 if (!IsLargeAddressAware(APP_NAME))
                 {
-                    int msgboxID = MessageBox(NULL, L"DOW2.exe is not large address aware, meaning it won't allocate more than 2gb of address space, which is not enough for this mod. Would you like to apply the large address aware patch?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                    if (msgboxID == IDYES)
+                    if (!ApplyLargeAddressAwarePatch(APP_NAME))
                     {
-                        if (!ApplyLargeAddressAwarePatch(APP_NAME))
-                        {
-                            MessageBox(NULL, L"Failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
-                        }
+                        MessageBox(NULL, L"This mod requires DOW2.exe to be large address aware and allocate more than 2gb of address space, but we failed to apply the large address aware patch to DOW2.exe. Try again, or apply it manually.", L"Error", MB_OK | MB_ICONERROR);
                     }
                 }
             }
@@ -1409,53 +1417,19 @@ int main()
 
                 if (GetFileAttributes(config.InjectorFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
                 {
-                    std::wstring binFileName = config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
-                    if (!CopyFileRaw(binFileName, config.InjectorFileName))
+                    std::wstring binFileName = baseLauncherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
+                    if (!CopyFileRaw(binFileName.c_str(), config.InjectorFileName.c_str()))
                     {
-                        MessageBox(NULL, (L"Failed to create the necessary injector version of the " + binFileName + L" file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
+                        MessageBox(NULL, (L"Failed to create the necessary injector file. The " + binFileName + L" file may be missing. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
                         return 1;
                     }
                 }
                 else
                 {
-                    // create the event for synchronization
-                    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL); // manual-reset event
-                    if (hEvent == NULL)
+                    if (!InjectorBinaryProcessing(config, baseLauncherName))
                     {
                         return 1;
                     }
-
-                    // start the binary processing thread to check and possibly replace the injector file
-                    HANDLE hThread = CreateThread(NULL, 0, InjectorBinaryProcessingThread, &config, 0, NULL);
-                    if (hThread == NULL)
-                    {
-                        CloseHandle(hEvent);
-                        return 1;
-                    }
-
-                    HANDLE handles[] = { hThread, hEvent };
-                    DWORD result = WaitForMultipleObjects(2, handles, FALSE, TIMEOUT_PROCESS);
-
-                    if (result == WAIT_TIMEOUT)
-                    {
-                        MessageBox(NULL, L"Injector processing or replacement timed out before it could complete.", L"Error", MB_OK | MB_ICONERROR);
-                        SetEvent(hEvent); // signal the event to exit the thread
-                        WaitForSingleObject(hThread, INFINITE); // wait for the thread to exit gracefully
-                        CloseHandle(hEvent);
-                        CloseHandle(hThread);
-                        return 1;
-                    }
-
-                    DWORD threadExitCode;
-                    if (!GetExitCodeThread(hThread, &threadExitCode) || threadExitCode != 0)
-                    {
-                        CloseHandle(hEvent);
-                        CloseHandle(hThread);
-                        return 1;
-                    }
-
-                    CloseHandle(hEvent);
-                    CloseHandle(hThread);
                 }
             }
 
