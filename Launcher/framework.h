@@ -1,4 +1,4 @@
-// header for storing generic functions and operations not specific to the game
+// header for storing generic functions and operations, not including functions specific to the game or its files
 
 #pragma once
 #pragma comment(lib, "Version.lib")
@@ -12,7 +12,7 @@
         std::wcout << msg << std::endl; \
     }
 
-// external includes
+// global includes
 #include <windows.h>
 #include <tlhelp32.h>
 #include <thread>
@@ -56,10 +56,10 @@ namespace bp = boost::process;
 
 //
 //
-// 
+//
 // WINDOWS-EXCLUSIVE FUNCTIONS
-// 
-// 
+//
+//
 //
 
 
@@ -126,7 +126,7 @@ std::string GetCommandLineOfProcess(DWORD processID)
 // function to find a process ID
 DWORD FindProcessId(const std::wstring& processName) 
 {
-    PROCESSENTRY32 processInfo;
+    PROCESSENTRY32 processInfo = {};
     processInfo.dwSize = sizeof(processInfo);
 
     HANDLE hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -240,7 +240,7 @@ bool CalculateMD5(const wchar_t* filepath, std::string& md5String)
     return true;
 }
 
-// function to check core count
+// function to check CPU core count
 int GetProcessorCoreCount() 
 {
     SYSTEM_INFO sysinfo;
@@ -269,7 +269,8 @@ bool IsProcessRunning(const wchar_t* processName)
                 CloseHandle(hSnapshot);
                 return true;
             }
-        } while (Process32Next(hSnapshot, &pe32));
+        } 
+        while (Process32Next(hSnapshot, &pe32));
     }
 
     CloseHandle(hSnapshot);
@@ -318,7 +319,8 @@ void MonitorAndSetPriority()
                         processHandle = NULL;
                     }
                 }
-            } while (Process32Next(hSnapshot, &pe32));
+            } 
+            while (Process32Next(hSnapshot, &pe32));
         }
 
         CloseHandle(hSnapshot);
@@ -390,7 +392,8 @@ std::map<std::wstring, std::wstring> GetFileVersionStrings(const std::wstring& f
 
             std::wstring keys[] = { L"ProductName", L"CompanyName", L"FileDescription", L"InternalName", L"OriginalFilename", L"LegalCopyright" };
 
-            for (const auto& key : keys) {
+            for (const auto& key : keys) 
+            {
                 if (VerQueryValueW(buffer.data(), (std::wstring(subBlock) + key).c_str(), &verData, &verDataLen)) 
                 {
                     versionInfoStrings[key] = std::wstring(static_cast<wchar_t*>(verData));
@@ -433,7 +436,7 @@ BOOL WINAPI ConsoleHandler(DWORD dwCtrlType)
     }
 }
 
-// function to query "bitness"
+// function to query "bitness" of the specified application
 bool Is32BitApplication(const std::wstring& filePath)
 {
     DWORD binaryType;
@@ -516,6 +519,42 @@ bool ApplyLargeAddressAwarePatch(const std::wstring& filePath)
     return true;
 }
 
+// function to unapply the 4gbpatch
+bool UnapplyLargeAddressAwarePatch(const std::wstring& filePath)
+{
+    HANDLE hFile = CreateFileW(filePath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        return false;
+    }
+
+    HANDLE hFileMapping = CreateFileMappingW(hFile, NULL, PAGE_READWRITE, 0, 0, NULL);
+    if (!hFileMapping)
+    {
+        CloseHandle(hFile);
+        return false;
+    }
+
+    LPVOID lpFileBase = MapViewOfFile(hFileMapping, FILE_MAP_WRITE, 0, 0, 0);
+    if (!lpFileBase)
+    {
+        CloseHandle(hFileMapping);
+        CloseHandle(hFile);
+        return false;
+    }
+
+    PIMAGE_DOS_HEADER pDOSHeader = (PIMAGE_DOS_HEADER)lpFileBase;
+    PIMAGE_NT_HEADERS pNTHeaders = (PIMAGE_NT_HEADERS)((DWORD_PTR)lpFileBase + pDOSHeader->e_lfanew);
+
+    pNTHeaders->FileHeader.Characteristics &= ~IMAGE_FILE_LARGE_ADDRESS_AWARE;
+
+    UnmapViewOfFile(lpFileBase);
+    CloseHandle(hFileMapping);
+    CloseHandle(hFile);
+
+    return true;
+}
+
 // function to suspend a process
 void SuspendProcess(DWORD processId)
 {
@@ -537,7 +576,8 @@ void SuspendProcess(DWORD processId)
                         CloseHandle(hThread);
                     }
                 }
-            } while (Thread32Next(hThreadSnapshot, &threadEntry));
+            } 
+            while (Thread32Next(hThreadSnapshot, &threadEntry));
         }
         CloseHandle(hThreadSnapshot);
     }
@@ -564,7 +604,8 @@ void ResumeProcess(DWORD processId)
                         CloseHandle(hThread);
                     }
                 }
-            } while (Thread32Next(hThreadSnapshot, &threadEntry));
+            } 
+            while (Thread32Next(hThreadSnapshot, &threadEntry));
         }
         CloseHandle(hThreadSnapshot);
     }
@@ -626,6 +667,161 @@ void ForceFocusOnWindow(HWND hwnd)
 
     // set the focus to the window
     SetFocus(hwnd);
+}
+
+// function to check if the OS is Windows 7 or earlier
+bool IsWindows7OrEarlier() 
+{
+    OSVERSIONINFOEX osvi;
+    ZeroMemory(&osvi, sizeof(OSVERSIONINFOEX));
+    osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
+    osvi.dwMajorVersion = 6;
+    osvi.dwMinorVersion = 1;
+
+    DWORDLONG const dwlConditionMask = VerSetConditionMask(
+        VerSetConditionMask(
+            0, VER_MAJORVERSION, VER_LESS_EQUAL),
+        VER_MINORVERSION, VER_LESS_EQUAL);
+
+    return VerifyVersionInfo(
+        &osvi, VER_MAJORVERSION | VER_MINORVERSION,
+        dwlConditionMask) != FALSE;
+}
+
+// function to get the full path of a file
+std::wstring GetFullPath(const std::wstring& path) 
+{
+    wchar_t fullPath[MAX_PATH];
+    if (GetFullPathName(path.c_str(), MAX_PATH, fullPath, NULL) == 0) 
+    {
+        return L"";
+    }
+    return std::wstring(fullPath);
+}
+
+// function to check the compatibility mode
+bool CheckCompatibilityMode(const std::wstring& exePath) 
+{
+    std::wstring fullPath = GetFullPath(exePath);
+    if (fullPath.empty()) 
+    {
+        return false;
+    }
+
+    HKEY hKey;
+    std::wstring registryPath = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
+    LONG result = RegOpenKeyEx(HKEY_CURRENT_USER, registryPath.c_str(), 0, KEY_READ, &hKey);
+    if (result != ERROR_SUCCESS) 
+    {
+        return false;
+    }
+
+    DWORD dataSize = 0;
+    result = RegGetValue(hKey, NULL, fullPath.c_str(), RRF_RT_REG_SZ, NULL, NULL, &dataSize);
+    if (result == ERROR_SUCCESS) 
+    {
+        std::wstring value(static_cast<DWORD>(dataSize) / sizeof(wchar_t), L'\0');
+        result = RegGetValue(hKey, NULL, fullPath.c_str(), RRF_RT_REG_SZ, NULL, &value[0], &dataSize);
+        RegCloseKey(hKey);
+        if (result == ERROR_SUCCESS) 
+        {
+            value.resize((static_cast<DWORD>(dataSize) / sizeof(wchar_t)) - 1);  // adjust the size after reading
+            if (value.find(L"WIN7RTM") != std::wstring::npos) 
+            {
+                return true; // WIN7RTM compatibility mode is already set
+            }
+        }
+    }
+
+    RegCloseKey(hKey);
+    return false; // compatibility mode not set to WIN7RTM
+}
+
+// function to set the WIN7RTM compatibility mode
+bool SetCompatibilityMode(const std::wstring& exePath) 
+{
+    std::wstring fullPath = GetFullPath(exePath);
+    if (fullPath.empty()) 
+    {
+        return false;
+    }
+
+    HKEY hKey;
+    std::wstring registryPath = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
+    LONG result = RegCreateKeyEx(HKEY_CURRENT_USER, registryPath.c_str(), 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL);
+    if (result != ERROR_SUCCESS) 
+    {
+        return false;
+    }
+
+    std::wstring value = L"WIN7RTM";
+    result = RegSetValueEx(hKey, fullPath.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+    RegCloseKey(hKey);
+
+    if (result != ERROR_SUCCESS) 
+    {
+        return false;
+    }
+    return true;
+}
+
+// function to remove the WIN7RTM compatibility mode
+bool RemoveWin7RtmCompatibilityMode(const std::wstring& exePath) 
+{
+    std::wstring fullPath = GetFullPath(exePath);
+    if (fullPath.empty()) 
+    {
+        return false;
+    }
+
+    HKEY hKey;
+    std::wstring registryPath = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\AppCompatFlags\\Layers";
+    LONG result = RegOpenKeyEx(HKEY_CURRENT_USER, registryPath.c_str(), 0, KEY_READ | KEY_WRITE, &hKey);
+    if (result != ERROR_SUCCESS) 
+    {
+        return false;
+    }
+
+    DWORD dataSize = 0;
+    result = RegGetValue(hKey, NULL, fullPath.c_str(), RRF_RT_REG_SZ, NULL, NULL, &dataSize);
+    if (result == ERROR_SUCCESS) 
+    {
+        std::wstring value(static_cast<DWORD>(dataSize) / sizeof(wchar_t), L'\0');
+        result = RegGetValue(hKey, NULL, fullPath.c_str(), RRF_RT_REG_SZ, NULL, &value[0], &dataSize);
+        if (result == ERROR_SUCCESS) 
+        {
+            value.resize((static_cast<DWORD>(dataSize) / sizeof(wchar_t)) - 1);  // adjust the size after reading
+
+            size_t pos = value.find(L"WIN7RTM");
+            if (pos != std::wstring::npos) 
+            {
+                value.erase(pos, wcslen(L"WIN7RTM"));
+                // remove any extra spaces
+                value.erase(std::remove(value.begin(), value.end(), L' '), value.end());
+                if (value.empty()) 
+                {
+                    result = RegDeleteValue(hKey, fullPath.c_str());
+                    if (result != ERROR_SUCCESS) 
+                    {
+                        RegCloseKey(hKey);
+                        return false;
+                    }
+                }
+                else 
+                {
+                    result = RegSetValueEx(hKey, fullPath.c_str(), 0, REG_SZ, reinterpret_cast<const BYTE*>(value.c_str()), static_cast<DWORD>((value.size() + 1) * sizeof(wchar_t)));
+                    if (result != ERROR_SUCCESS) 
+                    {
+                        RegCloseKey(hKey);
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    RegCloseKey(hKey);
+    return true;
 }
 
 
@@ -823,7 +1019,7 @@ bool CopyFileRaw(const std::wstring& srcFilePath, const std::wstring& dstFilePat
     }
 }
 
-// function to verify 16:9 aspect ratio
+// function to verify the 16:9 aspect ratio
 bool CheckAspectRatio(int width, int height) 
 {
     return (width * 9 == height * 16);

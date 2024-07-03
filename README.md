@@ -30,9 +30,15 @@
 
 - Optionally, if you want a splash screen, create a .bmp file with your desired artwork and resolution, and change its name to match the name of your mod's .module file, then change the [BitmapWidth] and [BitmapHeight] fields of the .launchconfig file to match its resolution. Those fields can remain at any number value if you are not using a splash screen.
 
+- Optionally, if your mod requires additional files, populate the [AdditionalFiles] field of the .launchconfig file with the full names, including extensions, of the additional files, separated by a comma and a space. These files will be verified through equivalently named .bin file whose name must contain a prefix name equivalent to your .module file, followed by an underscore. Leaving the field blank will ignore the additional file check.
+
+- Optionally, set the [WIN7CompatibilityMode] field of the .launchconfig file to true if your mod recommends DOW2.exe to be set to the Windows 7 compatibility mode.
+
 - If you wish to receive detailed debug messages, set the [VerboseDebug] field of the .launchconfig file to true.
 
 - If you wish to skip most checks, errors, and warnings, set the [IsUnsafe] field of the .launchconfig file to true.
+
+- If you wish to only skip warnings that do not prevent the game from launching, set the [Warnings] field of the .launchconfig file to false.
 
 - If you wish to see the console window regardless of whether a bitmap exists or not, set the [Console] field of the .launchconfig file to true.
 
@@ -79,11 +85,15 @@
 
 - If the [IsDXVK] field of the .launchconfig file is set to true, and the launcher detects no Vulkan capable GPU, a warning is displayed, but the process continues.
 
+- If the [AdditionalFiles] field of the .launchconfig file is populated, and those files are invalid or missing, the launcher will attempt to recover them using their .bin equivalents. If the .bin equivalents are not found, a warning is displayed and the entire process is aborted.
+
+- If the [WIN7CompatibilityMode] field of the .launchconfig file is true, a warning is displayed, and the user can either set DOW2.exe to the WIN7RTM compatibility mode, or continue with the launch.
+
 - If the launcher detects that DOW2.exe is using external launch parameters, a warning is displayed, but the process continues.
 
 - Compatibility with Linux, though currently severely limited in functionality.
 
-- Various failsafes and warnings for failed operations.
+- Various errors and warnings for failed operations.
 
 - A console window that appears if a .bmp file doesn't exist.
 
