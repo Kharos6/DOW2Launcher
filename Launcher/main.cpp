@@ -522,7 +522,7 @@ std::wstring ReadModFolderFromConfig(const std::wstring& configFilePath)
 }
 
 // function to handle the binary processing with a timeout
-DWORD WINAPI InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& launcherName)
+bool InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& launcherName)
 {
     std::string actualChecksum, expectedChecksum;
 
@@ -539,7 +539,7 @@ DWORD WINAPI InjectorBinaryProcessing(const LaunchConfig& config, const std::wst
     }
 
     // calculate the actual checksum of the injector file
-    if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) || actualChecksum != expectedChecksum)
+    if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
     {
         if (!CopyFileRaw(binFileName.c_str(), config.InjectorFileName.c_str()))
         {
@@ -550,7 +550,7 @@ DWORD WINAPI InjectorBinaryProcessing(const LaunchConfig& config, const std::wst
         }
 
         // verify the checksum again after replacement
-        if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) || actualChecksum != expectedChecksum)
+        if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
         {
             std::wstringstream errorMessage;
             errorMessage << config.InjectorFileName << L" file MD5 checksum still mismatched after attempted replacement with the valid injector version for this mod. Reacquire it from the mod package, or try again.";
@@ -1026,7 +1026,7 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
                 return false;
             }
 
-            if (actualChecksum != expectedChecksum)
+            if (!CalculateMD5(filePath.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
             {
                 MessageBox(NULL, (fileName + L" file MD5 checksum still mismatched after attempted replacement with the required version for this mod. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
                 return false;
@@ -1037,10 +1037,10 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
 }
 
 // function to verify XThread
-bool VerifyXThread(const LaunchConfig& config, const std::wstring& baseLauncherName)
+bool VerifyXThread(const LaunchConfig& config, const std::wstring& launcherName)
 {
     std::wstring dllPath = L"XThread.dll";
-    std::wstring binPath = baseLauncherName + L"_XThread.bin";
+    std::wstring binPath = launcherName + L"_XThread.bin";
     std::string binMD5, currentMD5;
 
     if (CalculateMD5(binPath.c_str(), binMD5))
@@ -1076,7 +1076,7 @@ bool VerifyXThread(const LaunchConfig& config, const std::wstring& baseLauncherN
 }
 
 // function to verify DXVK
-bool VerifyDXVK(const LaunchConfig& config, const std::wstring& baseLauncherName)
+bool VerifyDXVK(const LaunchConfig& config, const std::wstring& launcherName)
 {
     bool d3d9IsDXVK = false;
     bool d3d9Missing = false;
@@ -1095,7 +1095,7 @@ bool VerifyDXVK(const LaunchConfig& config, const std::wstring& baseLauncherName
             dxvkConfMissing = true;
         }
 
-        std::wstring d3d9BinPath = baseLauncherName + L"_d3d9.bin";
+        std::wstring d3d9BinPath = launcherName + L"_d3d9.bin";
 
         if (d3d9Missing)
         {
@@ -1190,7 +1190,7 @@ bool VerifyDXVK(const LaunchConfig& config, const std::wstring& baseLauncherName
             for (const auto& file : filesToCheck)
             {
                 std::wstring filePath = file.fileName;
-                std::wstring binFilePath = baseLauncherName + L"_" + file.binFileName;
+                std::wstring binFilePath = launcherName + L"_" + file.binFileName;
                 std::string currentMD5, expectedMD5;
                 if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
                 {
@@ -1668,12 +1668,10 @@ int main()
                         return 1;
                     }
                 }
-                else
+                
+                if (!InjectorBinaryProcessing(config, baseLauncherName))
                 {
-                    if (!InjectorBinaryProcessing(config, baseLauncherName))
-                    {
-                        return 1;
-                    }
+                    return 1;
                 }
             }
 

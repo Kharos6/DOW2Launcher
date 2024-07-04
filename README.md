@@ -53,29 +53,9 @@
 
 - If the .launchconfig file has misspelled or missing variables or variable entries, a warning is displayed and the entire process is aborted.
 
-- If the [Injector] field of the .launchconfig file is set to true, and the injector file doesn't exist or match the provided checksum, it replaces the injector file with the binary data of the injector's .bin file, and then launches the game. If the replacement fails, or the injector file is not found, a warning is displayed and the entire process is aborted.
-
-- If the [Injector] field of the .launchconfig file is set to true, and the injector's .config file is missing, a warning is displayed and the entire process is aborted.
-
-- If the [Injector] field of the .launchconfig file is set to true, and the injector's designated mod folder is missing, or it's missing the .dll files listed in the [InjectedFiles] field of the .launchconfig file, a warning is displayed and the entire process is aborted.
-
-- If the [Injector] field of the .launchconfig file is set to false, and the [IsSteam] field of the .launchconfig file is set to true, and the local XThread.dll file doesn't exist or match the provided checksum for the version that fixes the game's behavior with twelve core CPUs, it replaces the XThread.dll file with the binary data of the XThread.bin file, and then launches the game. If the replacement fails, or the XThread.dll file is not found, a warning is displayed and the entire process is aborted.
-
-- If the [InjectedConfigurations] field of the .launchconfig file is populated, and files with those extensions don't exist, a warning is displayed and the entire process is aborted.
-
 - If the .module file of the same name as the launcher is missing, a warning is displayed and the entire process is aborted.
 
 - If any of the .sga archives required by the mod are missing, a warning is displayed and the entire process is aborted. Locale .sga files are checked based on which language folders exist, and whether they contain a DOW2.ucs file. If only one language folder exists, and it contains a DOW2.ucs file, then it verifies that the corresponding .sga archives exist for that language. If multiple language folders exist, and more than one language folder contains a DOW2.ucs file, we ignore checking the existence of .sga archives under the entire Locale folder, as this is typical of dev builds that may contain multiple languages, and we should not cause errors for those.
-
-- If the [IsDXVK] field of the .launchconfig file is set to true, and the dxvk.conf or d3d9.dll files are missing, or the d3d9.dll file is not from DXVK, a warning is displayed, and the user can either acquire DXVK or continue with the launch. Additionaly, the DIVX files are checked for compatibility if the DXVK d3d9.dll file exists.
-
-- If the [IsDXVK] field of the .launchconfig file is set to false, and the d3d9.dll file specific to DXVK is present, a warning is displayed, and the user can either delete DXVK or continue with the launch.
-
-- If the [LAAPatch] field of the .launchconfig file is set to true, a warning is displayed, and the user can either set DOW2.exe to be large address aware, or continue with the launch.
-
-- If the [UIWarnings] field of the .launchconfig file is set to true, and the user has their game settings using a ui scale lesser than 100, and an aspect ratio that is not 16:9, a warning is displayed, but the process continues.
-
-- If the [GameVersion] field of the .launchconfig file is populated, and the DOW2.exe file version doesn't match it, a warning is displayed, but the process continues.
 
 - If the user tries to close the injector before it finishes its operations, a warning is displayed, advising against doing so, but giving the option to proceed or exit.
 
@@ -83,17 +63,11 @@
 
 - If there are no files under the Locale folder, a warning is displayed and the entire process is aborted.
 
-- If the [IsDXVK] field of the .launchconfig file is set to true, and the launcher detects no Vulkan capable GPU, a warning is displayed, but the process continues.
-
-- If the [AdditionalFiles] field of the .launchconfig file is populated, and those files are invalid or missing, the launcher will attempt to recover them using their .bin equivalents. If the .bin equivalents are not found, a warning is displayed and the entire process is aborted.
-
-- If the [WIN7CompatibilityMode] field of the .launchconfig file is true, a warning is displayed, and the user can either set DOW2.exe to the WIN7RTM compatibility mode, or continue with the launch.
-
 - If the launcher detects that DOW2.exe is using external launch parameters, a warning is displayed, but the process continues.
 
 - Compatibility with Linux, though currently severely limited in functionality.
 
-- Various errors and warnings for failed operations.
+- Various errors and warnings for failed operations specific to the launch configuration.
 
 - A console window that appears if a .bmp file doesn't exist.
 
