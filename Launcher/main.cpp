@@ -27,6 +27,7 @@ struct LaunchConfig
     bool WIN7CompatibilityMode = false;
     bool Warnings = false;
     std::vector<std::wstring> AdditionalFiles;
+    std::wstring BinFolder;
 };
 
 // function to validate the presence of necessary injector files
@@ -91,7 +92,7 @@ LaunchConfig ReadLaunchConfig()
     std::wstring line;
     std::set<std::wstring> requiredKeys = 
     {
-        L"Injector", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch", L"UIWarnings", L"WIN7CompatibilityMode", L"Warnings", L"AdditionalFiles"
+        L"Injector", L"BitmapWidth", L"BitmapHeight", L"InjectorFileName", L"LaunchParams", L"IsRetribution", L"IsSteam", L"VerboseDebug", L"IsDXVK", L"FirstTimeLaunchCheck", L"FirstTimeLaunchMessage", L"IsUnsafe", L"Console", L"InjectedFiles", L"InjectedConfigurations", L"GameVersion", L"LAAPatch", L"UIWarnings", L"WIN7CompatibilityMode", L"Warnings", L"AdditionalFiles", L"BinFolder"
     };
     std::map<std::wstring, int> lineNumbers;
     int lineNumber = 0;
@@ -387,6 +388,10 @@ LaunchConfig ReadLaunchConfig()
                 config.AdditionalFiles.push_back(value);
             }
         }
+        else if (key == L"BinFolder")
+        {
+            config.BinFolder = value;
+        }
         else
         {
             MessageBox(NULL, (L"Unexpected configuration key: " + key + L" on line " + std::to_wstring(lineNumber) + L". Reacquire the launch configuration file from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
@@ -441,6 +446,7 @@ void WriteLaunchConfig(const LaunchConfig& config)
     configFile << L"IsRetribution=" << (config.IsRetribution ? L"true" : L"false") << L"\n";
     configFile << L"IsSteam=" << (config.IsSteam ? L"true" : L"false") << L"\n";
     configFile << L"GameVersion=" << config.GameVersion << L"\n";
+    configFile << L"BinFolder=" << config.BinFolder << L"\n";
     configFile << L"IsDXVK=" << (config.IsDXVK ? L"true" : L"false") << L"\n";
     configFile << L"LAAPatch=" << (config.LAAPatch ? L"true" : L"false") << L"\n";
     configFile << L"UIWarnings=" << (config.UIWarnings ? L"true" : L"false") << L"\n";
@@ -527,7 +533,7 @@ bool InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& la
     std::string actualChecksum, expectedChecksum;
 
     // Construct the injector bin file name using the launcher name and _injectorfilename from the configuration
-    std::wstring binFileName = launcherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
+    std::wstring binFileName = config.BinFolder + L"\\" + launcherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
 
     // calculate the expected checksum from the .bin file
     if (!CalculateMD5(binFileName.c_str(), expectedChecksum))
@@ -539,7 +545,7 @@ bool InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& la
     }
 
     // calculate the actual checksum of the injector file
-    if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
+    if (CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
     {
         if (!CopyFileRaw(binFileName.c_str(), config.InjectorFileName.c_str()))
         {
@@ -550,7 +556,7 @@ bool InjectorBinaryProcessing(const LaunchConfig& config, const std::wstring& la
         }
 
         // verify the checksum again after replacement
-        if (!CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
+        if (CalculateMD5(config.InjectorFileName.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
         {
             std::wstringstream errorMessage;
             errorMessage << config.InjectorFileName << L" file MD5 checksum still mismatched after attempted replacement with the valid injector version for this mod. Reacquire it from the mod package, or try again.";
@@ -905,16 +911,20 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
 }
 
 // function to check the game's configuration file
-void CheckGameConfiguration(const LaunchConfig& config) 
+void CheckGameConfiguration(const LaunchConfig& config)
 {
     wchar_t* userProfilePath = nullptr;
-    SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &userProfilePath);
+    HRESULT hr = SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &userProfilePath);
+    if (FAILED(hr)) 
+    {
+        return;
+    }
 
     std::wstring gameFolder = config.IsRetribution ? L"Dawn of War II - Retribution" : L"Dawn of War 2";
     std::wstring gameConfigFilePath = std::wstring(userProfilePath) + L"\\My Games\\" + gameFolder + L"\\Settings\\configuration.lua";
 
     std::wifstream configFile(gameConfigFilePath);
-    if (!configFile) 
+    if (!configFile)
     {
         return; // if file loading fails, simply return and continue the program
     }
@@ -923,34 +933,39 @@ void CheckGameConfiguration(const LaunchConfig& config)
     int screenHeight = 0;
     int uiScale = 100;
 
-    std::wregex screenWidthRegex(L"setting = \"screenwidth\".*?value = (\\d+)");
-    std::wregex screenHeightRegex(L"setting = \"screenheight\".*?value = (\\d+)");
-    std::wregex uiScaleRegex(L"setting = \"uiscale\".*?value = (\\d+)");
+    std::wregex screenWidthRegex(L"setting\\s*=\\s*\"screenwidth\"\\s*,\\s*value\\s*=\\s*(\\d+)");
+    std::wregex screenHeightRegex(L"setting\\s*=\\s*\"screenheight\"\\s*,\\s*value\\s*=\\s*(\\d+)");
+    std::wregex uiScaleRegex(L"setting\\s*=\\s*\"uiscale\"\\s*,\\s*value\\s*=\\s*(\\d+)");
 
     std::wsmatch match;
     std::wstring line;
+    std::wstring fileContent;
 
-    while (std::getline(configFile, line)) 
+    // read entire file into a single string
+    while (std::getline(configFile, line))
     {
-        if (std::regex_search(line, match, screenWidthRegex)) 
-        {
-            screenWidth = std::stoi(match[1]);
-        }
-        else if (std::regex_search(line, match, screenHeightRegex)) 
-        {
-            screenHeight = std::stoi(match[1]);
-        }
-        else if (std::regex_search(line, match, uiScaleRegex)) 
-        {
-            uiScale = std::stoi(match[1]);
-        }
+        fileContent += line + L"\n";
     }
 
     configFile.close();
 
-    if (screenWidth > 0 && screenHeight > 0) 
+    // perform regex search on the entire content
+    if (std::regex_search(fileContent, match, screenWidthRegex))
     {
-        if (!CheckAspectRatio(screenWidth, screenHeight)) 
+        screenWidth = std::stoi(match[1]);
+    }
+    if (std::regex_search(fileContent, match, screenHeightRegex))
+    {
+        screenHeight = std::stoi(match[1]);
+    }
+    if (std::regex_search(fileContent, match, uiScaleRegex))
+    {
+        uiScale = std::stoi(match[1]);
+    }
+
+    if (screenWidth > 0 && screenHeight > 0)
+    {
+        if (!CheckAspectRatio(screenWidth, screenHeight))
         {
             std::wstringstream warningMessage;
             warningMessage << L"This mod requires the game resolution to be set to a 16:9 aspect ratio in order for the UI to function correctly. 16:9 resolutions include any resolution marked in the game as Widescreen, such as 1280x720, 1920x1080, 2560x1440, or 3840x2160. If you are unable to change the resolution in the game, you instead change the screenWidth and screenHeight values in the following configuration file:" << gameConfigFilePath;
@@ -958,12 +973,14 @@ void CheckGameConfiguration(const LaunchConfig& config)
         }
     }
 
-    if (uiScale != 100) 
+    if (uiScale != 100)
     {
         std::wstringstream warningMessage;
         warningMessage << L"This mod requires the UI scale setting to be set to 100 in order for the UI to function correctly. Adjust the UI scale in the following configuration file: " << gameConfigFilePath;
         MessageBox(NULL, warningMessage.str().c_str(), L"Warning", MB_OK | MB_ICONWARNING);
     }
+
+    CoTaskMemFree(userProfilePath);
 }
 
 // function to check additional files
@@ -982,7 +999,7 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
         std::string actualChecksum, expectedChecksum;
         size_t lastDotPos = fileName.find_last_of(L'.');
         std::wstring baseFileName = (lastDotPos == std::wstring::npos) ? fileName : fileName.substr(0, lastDotPos);
-        std::wstring expectedFileName = launcherName + L"_" + baseFileName + L".bin";
+        std::wstring expectedFileName = config.BinFolder + L"\\" + launcherName + L"_" + baseFileName + L".bin";
 
         // skip the checksum verification if the .bin file is only the launcher name with an underscore
         if (baseFileName == launcherName + L"_")
@@ -1026,7 +1043,7 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
                 return false;
             }
 
-            if (!CalculateMD5(filePath.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
+            if (CalculateMD5(filePath.c_str(), actualChecksum) && actualChecksum != expectedChecksum)
             {
                 MessageBox(NULL, (fileName + L" file MD5 checksum still mismatched after attempted replacement with the required version for this mod. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
                 return false;
@@ -1040,7 +1057,7 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
 bool VerifyXThread(const LaunchConfig& config, const std::wstring& launcherName)
 {
     std::wstring dllPath = L"XThread.dll";
-    std::wstring binPath = launcherName + L"_XThread.bin";
+    std::wstring binPath = config.BinFolder + L"\\" + launcherName + L"_XThread.bin";
     std::string binMD5, currentMD5;
 
     if (CalculateMD5(binPath.c_str(), binMD5))
@@ -1068,7 +1085,7 @@ bool VerifyXThread(const LaunchConfig& config, const std::wstring& launcherName)
     else
     {
         std::wstringstream errorMessage;
-        errorMessage << L"Failed to calculate the MD5 checksum of the " << binPath << L" file in order to validate XThread.dll. The file may be missing. Reacquire it from the mod package, or try again.";
+        errorMessage << L"Failed to calculate the MD5 checksum of the " << binPath << L" file in order to validate the updated version required for the game to run on CPUs with more than twelve cores. The file may be missing. Reacquire it from the mod package, or try again.";
         MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
         return false;
     }
@@ -1095,7 +1112,7 @@ bool VerifyDXVK(const LaunchConfig& config, const std::wstring& launcherName)
             dxvkConfMissing = true;
         }
 
-        std::wstring d3d9BinPath = launcherName + L"_d3d9.bin";
+        std::wstring d3d9BinPath = config.BinFolder + L"\\" + launcherName + L"_d3d9.bin";
 
         if (d3d9Missing)
         {
@@ -1190,7 +1207,7 @@ bool VerifyDXVK(const LaunchConfig& config, const std::wstring& launcherName)
             for (const auto& file : filesToCheck)
             {
                 std::wstring filePath = file.fileName;
-                std::wstring binFilePath = launcherName + L"_" + file.binFileName;
+                std::wstring binFilePath = config.BinFolder + L"\\" + launcherName + L"_" + file.binFileName;
                 std::string currentMD5, expectedMD5;
                 if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
                 {
@@ -1395,8 +1412,27 @@ int main()
             // check if DOW2.exe is already running
             if (IsProcessRunning(APP_NAME))
             {
-                MessageBox(NULL, L"DOW2.exe is already running. Close it before launching again.", L"Error", MB_OK | MB_ICONERROR);
-                return 1;
+                int response = MessageBox(NULL, L"Cannot proceed due to DOW2.exe already running. Do you want to terminate DOW2.exe?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                if (response == IDYES)
+                {
+                    DWORD dow2ProcessId = FindProcessId(APP_NAME);
+                    if (dow2ProcessId != 0)
+                    {
+                        if (TerminateProcessById(dow2ProcessId))
+                        {
+                            WaitForProcessTermination(dow2ProcessId, 10000);
+                        }
+                        else
+                        {
+                            MessageBox(NULL, L"Timed out trying to terminate DOW2.exe. Terminate it manually, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                            return 1;
+                        }
+                    }
+                }
+                else
+                {
+                    return 1;
+                }
             }
 
             if (config.VerboseDebug)
@@ -1661,7 +1697,7 @@ int main()
 
                 if (GetFileAttributes(config.InjectorFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
                 {
-                    std::wstring binFileName = baseLauncherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
+                    std::wstring binFileName = config.BinFolder + L"\\" + baseLauncherName + L"_" + config.InjectorFileName.substr(0, config.InjectorFileName.find_last_of(L".")) + L".bin";
                     if (!CopyFileRaw(binFileName.c_str(), config.InjectorFileName.c_str()))
                     {
                         MessageBox(NULL, (L"Failed to create or replace the injector file required by this mod. The " + binFileName + L" file may be missing. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);

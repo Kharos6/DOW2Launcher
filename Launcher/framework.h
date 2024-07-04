@@ -55,6 +55,7 @@
 #include "vulkan/vulkan.h"
 
 namespace bp = boost::process;
+namespace fs = boost::filesystem;
 
 
 
@@ -154,6 +155,31 @@ DWORD FindProcessId(const std::wstring& processName)
 
     CloseHandle(hProcessSnap);
     return 0;
+}
+
+// function to terminate a process by ID
+bool TerminateProcessById(DWORD processId)
+{
+    HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, processId);
+    if (hProcess == NULL)
+        return FALSE;
+
+    BOOL result = TerminateProcess(hProcess, 1);
+    CloseHandle(hProcess);
+    return result;
+}
+
+// helper function to confirm for process termination
+bool WaitForProcessTermination(DWORD processId, DWORD timeoutMillis)
+{
+    HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, processId);
+    if (hProcess == NULL)
+        return false;
+
+    DWORD waitResult = WaitForSingleObject(hProcess, timeoutMillis);
+    CloseHandle(hProcess);
+
+    return waitResult == WAIT_OBJECT_0; // return true if the process terminated, false otherwise
 }
 
 // function to strip the executable path from a string
