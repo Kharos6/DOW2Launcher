@@ -34,6 +34,8 @@
 
 - Optionally, set the [WIN7CompatibilityMode] field of the .launchconfig file to true if your mod recommends DOW2.exe to be set to the Windows 7 compatibility mode.
 
+- Set the [BinFolder] field of the .launchconfig file to the folder you wish to use to store any .bin files for your mod.
+
 - If you wish to receive detailed debug messages, set the [VerboseDebug] field of the .launchconfig file to true.
 
 - If you wish to skip most checks, errors, and warnings, set the [IsUnsafe] field of the .launchconfig file to true.

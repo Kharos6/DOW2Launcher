@@ -1,6 +1,7 @@
 IsRetribution=true
 IsSteam=true
 GameVersion=
+BinFolder=
 IsDXVK=false
 LAAPatch=false
 UIWarnings=false
