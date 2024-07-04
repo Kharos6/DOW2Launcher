@@ -1,4 +1,4 @@
-// header for storing generic functions and operations, not including functions specific to the game or its files
+// header for storing generic functions, not including functions specific to the game or its files
 
 #pragma once
 #pragma comment(lib, "Version.lib")
@@ -12,14 +12,10 @@
         std::wcout << msg << std::endl; \
     }
 
-// global includes
-#include <windows.h>
-#include <tlhelp32.h>
-#include <thread>
-#include <wincrypt.h>
+// standard library headers
+#include <iostream>
 #include <fstream>
 #include <sstream>
-#include <iostream>
 #include <string>
 #include <vector>
 #include <regex>
@@ -34,10 +30,18 @@
 #include <chrono>
 #include <cstdlib>
 #include <sys/stat.h>
-#include <shlobj.h>
 #include <cwctype>
 #include <iomanip>
+#include <thread>
+
+// windows headers
+#include <windows.h>
+#include <tlhelp32.h>
+#include <wincrypt.h>
+#include <shlobj.h>
 #include <psapi.h>
+
+// boost headers
 #include <boost/process.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
 #include <boost/interprocess/exceptions.hpp>
@@ -47,7 +51,7 @@
 #include <boost/dll/runtime_symbol_info.hpp>
 #include <boost/predef/os.h>
 
-// local includes
+// local headers
 #include "vulkan/vulkan.h"
 
 namespace bp = boost::process;

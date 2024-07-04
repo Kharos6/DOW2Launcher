@@ -1,6 +1,6 @@
 #define APP_NAME L"DOW2.exe"
 
-//local includes
+//local headers
 #include "framework.h"
 
 // structure to hold the launch configuration
@@ -862,18 +862,6 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
 
     bool skipLocaleSgaChecks = (localeFoldersWithUcs.size() > 1);
 
-    if (config.VerboseDebug)
-    {
-        if (skipLocaleSgaChecks)
-        {
-            MessageBox(NULL, L"Multiple localization folders or DOW2.ucs files detected. Assuming development build. Ignoring .sga checks in Locale subfolders.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-        else
-        {
-            MessageBox(NULL, L"Only one localization folder and DOW2.ucs file detected. Assuming not development build. Proceeding with .sga checks in Locale subfolders.", L"Debug", MB_OK | MB_ICONINFORMATION);
-        }
-    }
-
     // reset file reading position for the second pass
     moduleFile.clear();
     moduleFile.seekg(0, std::ios::beg);
@@ -897,8 +885,7 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
                     std::wstring localeFolder = rootDir + L"\\GameAssets\\Locale\\" + localeMatch[1].str();
                     std::wstring ucsFile = localeFolder + L"\\DOW2.ucs";
 
-                    if (GetFileAttributes(localeFolder.c_str()) == INVALID_FILE_ATTRIBUTES ||
-                        GetFileAttributes(ucsFile.c_str()) == INVALID_FILE_ATTRIBUTES)
+                    if (GetFileAttributes(localeFolder.c_str()) == INVALID_FILE_ATTRIBUTES || GetFileAttributes(ucsFile.c_str()) == INVALID_FILE_ATTRIBUTES)
                     {
                         // Locale folder or DOW2.ucs file does not exist, we skip this .sga file check
                         continue;
@@ -917,6 +904,7 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
     return true;
 }
 
+// function to check the game's configuration file
 void CheckGameConfiguration(const LaunchConfig& config) 
 {
     wchar_t* userProfilePath = nullptr;
@@ -996,7 +984,7 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
         std::wstring baseFileName = (lastDotPos == std::wstring::npos) ? fileName : fileName.substr(0, lastDotPos);
         std::wstring expectedFileName = launcherName + L"_" + baseFileName + L".bin";
 
-        // skip the checksum verification if the .bin file is only the exe name with an underscore
+        // skip the checksum verification if the .bin file is only the launcher name with an underscore
         if (baseFileName == launcherName + L"_")
         {
             continue;
@@ -1042,6 +1030,223 @@ bool CheckAdditionalFiles(const LaunchConfig& config, const std::wstring& launch
             {
                 MessageBox(NULL, (fileName + L" file MD5 checksum still mismatched after attempted replacement with the required version for this mod. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR);
                 return false;
+            }
+        }
+    }
+    return true;
+}
+
+// function to verify XThread
+bool VerifyXThread(const LaunchConfig& config, const std::wstring& baseLauncherName)
+{
+    std::wstring dllPath = L"XThread.dll";
+    std::wstring binPath = baseLauncherName + L"_XThread.bin";
+    std::string binMD5, currentMD5;
+
+    if (CalculateMD5(binPath.c_str(), binMD5))
+    {
+        if (GetFileAttributes(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+        {
+            if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != binMD5)
+            {
+                if (!CopyFileRaw(binPath, dllPath))
+                {
+                    std::wstringstream errorMessage;
+                    errorMessage << L"Failed to create or replace the XThread.dll file with the updated version that is required for the game to run on CPUs with more than twelve cores. The " << binPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                    return false;
+                }
+
+                if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != binMD5)
+                {
+                    MessageBox(NULL, L"XThread.dll file MD5 checksum still mismatched after attempted replacement with the updated version that is required for the game to run on CPUs with more than twelve cores. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                    return false;
+                }
+            }
+        }
+    }
+    else
+    {
+        std::wstringstream errorMessage;
+        errorMessage << L"Failed to calculate the MD5 checksum of the " << binPath << L" file in order to validate XThread.dll. The file may be missing. Reacquire it from the mod package, or try again.";
+        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    return true;
+}
+
+// function to verify DXVK
+bool VerifyDXVK(const LaunchConfig& config, const std::wstring& baseLauncherName)
+{
+    bool d3d9IsDXVK = false;
+    bool d3d9Missing = false;
+    bool dxvkConfMissing = false;
+
+    if (config.IsDXVK)
+    {
+
+        if (GetFileAttributes(L"d3d9.dll") == INVALID_FILE_ATTRIBUTES)
+        {
+            d3d9Missing = true;
+        }
+
+        if (GetFileAttributes(L"dxvk.conf") == INVALID_FILE_ATTRIBUTES)
+        {
+            dxvkConfMissing = true;
+        }
+
+        std::wstring d3d9BinPath = baseLauncherName + L"_d3d9.bin";
+
+        if (d3d9Missing)
+        {
+            if (config.Warnings)
+            {
+                int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch this mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                if (msgboxID == IDYES)
+                {
+                    if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
+                    {
+                        std::wstringstream errorMessage;
+                        errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                        return false;
+                    }
+                    d3d9IsDXVK = true;
+
+                    if (dxvkConfMissing)
+                    {
+                        std::ofstream dxvkConfFile("dxvk.conf");
+                        if (!dxvkConfFile)
+                        {
+                            MessageBox(NULL, L"Failed to create the dxvk.conf file. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                            return false;
+                        }
+                        dxvkConfFile << "dxgi.maxFrameRate = 60\n";
+                        dxvkConfFile << "d3d9.maxFrameRate = 60\n";
+                        dxvkConfFile.close();
+                    }
+                }
+            }
+        }
+        else
+        {
+            auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
+
+            if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] != L"DXVK")
+            {
+                if (config.Warnings)
+                {
+                    int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. While you can still proceed to launch this mod, you will crash in large scenarios, and experience a loss in performance. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                    if (msgboxID == IDYES)
+                    {
+                        if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
+                        {
+                            std::wstringstream errorMessage;
+                            errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                            MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] == L"DXVK")
+            {
+                d3d9IsDXVK = true;
+            }
+
+            if (dxvkConfMissing && d3d9IsDXVK)
+            {
+                std::ofstream dxvkConfFile("dxvk.conf");
+                if (!dxvkConfFile)
+                {
+                    MessageBox(NULL, L"Failed to create the dxvk.conf file for DXVK. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                    return false;
+                }
+                dxvkConfFile << "dxgi.maxFrameRate = 60\n";
+                dxvkConfFile << "d3d9.maxFrameRate = 60\n";
+                dxvkConfFile.close();
+            }
+        }
+    }
+
+    if (config.IsDXVK && config.Injector && d3d9IsDXVK)
+    {
+        auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
+        if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
+        {
+            struct FileCheck
+            {
+                std::wstring fileName;
+                std::wstring binFileName;
+            };
+
+            FileCheck filesToCheck[] =
+            {
+                {L"DivxDecoder.dll", L"DivxDecoder.bin"},
+                {L"DivxMediaLib.dll", L"DivxMediaLib.bin"}
+            };
+
+            for (const auto& file : filesToCheck)
+            {
+                std::wstring filePath = file.fileName;
+                std::wstring binFilePath = baseLauncherName + L"_" + file.binFileName;
+                std::string currentMD5, expectedMD5;
+                if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                {
+                    // calculate the expected MD5 checksum from the .bin file
+                    if (CalculateMD5(binFilePath.c_str(), expectedMD5))
+                    {
+                        // calculate the current MD5 checksum from the .dll file
+                        if (CalculateMD5(filePath.c_str(), currentMD5) && currentMD5 != expectedMD5)
+                        {
+                            if (!CopyFileRaw(binFilePath.c_str(), file.fileName.c_str()))
+                            {
+                                std::wstringstream errorMessage;
+                                errorMessage << L"Failed to create or replace the " << file.fileName << L" file with the correct version that is required in order to allow movies to play correctly with the DXVK and injector combination. The " << binFilePath << L" file may be missing. Reacquire it from the mod package, or try again.";
+                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                                return false;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        std::wstringstream errorMessage;
+                        errorMessage << L"Failed to calculate the MD5 checksum of the " << binFilePath << L" file in order to validate the necessary DIVX files for the injector and DXVK combination. The file may be missing. Reacquire it from the mod package, or try again.";
+                        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    if (!config.IsDXVK)
+    {
+        auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
+
+        if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
+        {
+            if (config.Warnings)
+            {
+                int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
+                if (msgboxID == IDYES)
+                {
+                    DeleteFile(L"d3d9.dll");
+                    DeleteFile(L"dxvk.conf");
+
+                    if (GetFileAttributes(L"d3d9.dll") != INVALID_FILE_ATTRIBUTES)
+                    {
+                        MessageBox(NULL, L"Failed to delete the DXVK d3d9.dll file. Remove it manually, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                        return false;
+                    }
+
+                    if (GetFileAttributes(L"dxvk.conf") != INVALID_FILE_ATTRIBUTES)
+                    {
+                        MessageBox(NULL, L"Failed to delete the DXVK dxvk.conf file. Remove it manually, or try again.", L"Error", MB_OK | MB_ICONERROR);
+                        return false;
+                    }
+                }
             }
         }
     }
@@ -1194,6 +1399,11 @@ int main()
                 return 1;
             }
 
+            if (config.VerboseDebug)
+            {
+                MessageBox(NULL, L"Verified DOW2.exe running state.", L"Debug", MB_OK | MB_ICONINFORMATION);
+            }
+
             // check if DOW2.exe exists in the same directory as the launcher
             if (GetFileAttributes(APP_NAME) == INVALID_FILE_ATTRIBUTES)
             {
@@ -1203,7 +1413,7 @@ int main()
 
             if (config.VerboseDebug)
             {
-                MessageBox(NULL, L"Verified DOW2.exe.", L"Debug", MB_OK | MB_ICONINFORMATION);
+                MessageBox(NULL, L"Verified DOW2.exe presence.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
 
             CONSOLE_MESSAGE(L"DOW2 check.");
@@ -1222,13 +1432,14 @@ int main()
                 return 1;
             }
 
+            // check for ChaosRisingGDF.dll if IsRetribution is false
             if (!config.IsRetribution && GetFileAttributes(L"ChaosRisingGDF.dll") == INVALID_FILE_ATTRIBUTES)
             {
                 MessageBox(NULL, L"The ChaosRisingGDF.dll file is missing, but this mod is designed for Dawn of War II - Chaos Rising. Install the mod to Dawn of War II - Chaos Rising.", L"Error", MB_OK | MB_ICONERROR);
                 return 1;
             }
 
-            // check for CGalaxy.dll if IsSteam is false and file does not exist
+            // check for CGalaxy.dll if IsSteam is false
             if (!config.IsSteam && GetFileAttributes(L"CGalaxy.dll") == INVALID_FILE_ATTRIBUTES)
             {
                 MessageBox(NULL, L"The CGalaxy.dll file is missing, but this mod is designed for the GOG distribution of the game. Install the mod to the GOG distribution of the game.", L"Error", MB_OK | MB_ICONERROR);
@@ -1245,15 +1456,6 @@ int main()
                     {
                         MessageBox(NULL, (L"File version of DOW2.exe does not match the supported version of the game for this mod. Your gameplay experience may be altered, or the mod may not work. Expected: " + config.GameVersion + L", Found: " + versionStrings[L"FileVersion"]).c_str(), L"Warning", MB_OK | MB_ICONWARNING);
                     }
-                    if (config.VerboseDebug)
-                    {
-                        std::wstring debugMessage = L"DOW2.exe version info:\n";
-                        for (const auto& pair : versionStrings)
-                        {
-                            debugMessage += pair.first + L": " + pair.second + L"\n";
-                        }
-                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
                 }
             }
 
@@ -1268,42 +1470,13 @@ int main()
 
             if (numCores >= 12 && config.IsSteam && !config.Injector)
             {
-                std::wstring dllPath = L"XThread.dll";
-                std::wstring binPath = baseLauncherName + L"_XThread.bin";
-                std::string binMD5, currentMD5;
-
-                if (CalculateMD5(binPath.c_str(), binMD5))
-                {
-                    if (GetFileAttributes(dllPath.c_str()) != INVALID_FILE_ATTRIBUTES)
-                    {
-                        if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != binMD5)
-                        {
-                            if (!CopyFileRaw(binPath, dllPath))
-                            {
-                                std::wstringstream errorMessage;
-                                errorMessage << L"Failed to create or replace the XThread.dll file with the updated version that is required for the game to run on CPUs with more than twelve cores. The " << binPath << L" file may be missing. Reacquire it from the mod package, or try again.";
-                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-
-                            if (CalculateMD5(dllPath.c_str(), currentMD5) && currentMD5 != binMD5)
-                            {
-                                MessageBox(NULL, L"XThread.dll file MD5 checksum still mismatched after attempted replacement with the updated version that is required for the game to run on CPUs with more than twelve cores. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    std::wstringstream errorMessage;
-                    errorMessage << L"Failed to calculate the MD5 checksum of the " << binPath << L" file in order to validate XThread.dll. The file may be missing. Reacquire it from the mod package, or try again.";
-                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                    return 1;
-                }
+               if (!VerifyXThread(config, baseLauncherName))
+               {
+                   return 1;
+               }
             }
 
-            if (config.VerboseDebug && config.IsSteam && !config.Injector)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified CPU.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
@@ -1322,211 +1495,23 @@ int main()
                 }
             }
 
-            if (config.VerboseDebug && config.IsDXVK)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified Vulkan.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
 
-            if (config.VerboseDebug && config.IsDXVK)
+            if (config.IsDXVK)
             {
                 CONSOLE_MESSAGE(L"Vulkan check.");
             }
 
-            bool d3d9IsDXVK = false;
-
             // check for dxvk
-            if (config.IsDXVK)
+            if (!VerifyDXVK(config, baseLauncherName))
             {
-                bool d3d9Missing = false;
-                bool dxvkConfMissing = false;
-
-                if (GetFileAttributes(L"d3d9.dll") == INVALID_FILE_ATTRIBUTES)
-                {
-                    d3d9Missing = true;
-                }
-
-                if (GetFileAttributes(L"dxvk.conf") == INVALID_FILE_ATTRIBUTES)
-                {
-                    dxvkConfMissing = true;
-                }
-
-                std::wstring d3d9BinPath = baseLauncherName + L"_d3d9.bin";
-
-                if (d3d9Missing)
-                {
-                    if (config.Warnings)
-                    {
-                        int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the d3d9.dll file is missing. While you can still proceed to launch this mod, you will crash in large scenarios, and experience a loss in performance. Would you like to acquire DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                        if (msgboxID == IDYES)
-                        {
-                            if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
-                            {
-                                std::wstringstream errorMessage;
-                                errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
-                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-                            d3d9IsDXVK = true;
-
-                            if (dxvkConfMissing)
-                            {
-                                std::ofstream dxvkConfFile("dxvk.conf");
-                                if (!dxvkConfFile)
-                                {
-                                    MessageBox(NULL, L"Failed to create the dxvk.conf file. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                                    return 1;
-                                }
-                                dxvkConfFile << "dxgi.maxFrameRate = 60\n";
-                                dxvkConfFile << "d3d9.maxFrameRate = 60\n";
-                                dxvkConfFile.close();
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
-
-                    if (config.VerboseDebug)
-                    {
-                        std::wstring debugMessage = L"d3d9.dll version info:\n";
-                        for (const auto& pair : versionStrings)
-                        {
-                            debugMessage += pair.first + L": " + pair.second + L"\n";
-                        }
-                        MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                    }
-
-                    if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] != L"DXVK")
-                    {
-                        if (config.Warnings)
-                        {
-                            int msgboxID = MessageBox(NULL, L"This mod requires DXVK, but the present d3d9.dll file is not identified as DXVK. While you can still proceed to launch this mod, you will crash in large scenarios, and experience a loss in performance. Would you like to replace it with the DXVK version?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                            if (msgboxID == IDYES)
-                            {
-                                if (!CopyFileRaw(d3d9BinPath, L"d3d9.dll"))
-                                {
-                                    std::wstringstream errorMessage;
-                                    errorMessage << L"Failed to create or replace the d3d9.dll file with the DXVK version. The " << d3d9BinPath << L" file may be missing. Reacquire it from the mod package, or try again.";
-                                    MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                                    return 1;
-                                }
-                            }
-                        }
-                    }
-
-                    if (versionStrings.find(L"ProductName") == versionStrings.end() || versionStrings[L"ProductName"] == L"DXVK")
-                    {
-                        d3d9IsDXVK = true;
-                    }
-
-                    if (dxvkConfMissing && d3d9IsDXVK)
-                    {
-                        std::ofstream dxvkConfFile("dxvk.conf");
-                        if (!dxvkConfFile)
-                        {
-                            MessageBox(NULL, L"Failed to create the dxvk.conf file for DXVK. Reacquire it from the mod package, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                            return 1;
-                        }
-                        dxvkConfFile << "dxgi.maxFrameRate = 60\n";
-                        dxvkConfFile << "d3d9.maxFrameRate = 60\n";
-                        dxvkConfFile.close();
-                    }
-                }
-            }
-            else
-            {
-                auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
-
-                if (config.VerboseDebug)
-                {
-                    std::wstring debugMessage = L"d3d9.dll version info:\n";
-                    for (const auto& pair : versionStrings)
-                    {
-                        debugMessage += pair.first + L": " + pair.second + L"\n";
-                    }
-                    MessageBox(NULL, debugMessage.c_str(), L"Debug", MB_OK | MB_ICONINFORMATION);
-                }
-
-                if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
-                {
-                    if (config.Warnings)
-                    {
-                        int msgboxID = MessageBox(NULL, L"You have DXVK installed, but this mod does not require it. Would you like to remove DXVK?", L"Warning", MB_YESNO | MB_ICONWARNING);
-                        if (msgboxID == IDYES)
-                        {
-                            DeleteFile(L"d3d9.dll");
-                            DeleteFile(L"dxvk.conf");
-
-                            if (GetFileAttributes(L"d3d9.dll") != INVALID_FILE_ATTRIBUTES)
-                            {
-                                MessageBox(NULL, L"Failed to delete the DXVK d3d9.dll file. Remove it manually, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-
-                            if (GetFileAttributes(L"dxvk.conf") != INVALID_FILE_ATTRIBUTES)
-                            {
-                                MessageBox(NULL, L"Failed to delete the DXVK dxvk.conf file. Remove it manually, or try again.", L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-                        }
-                    }
-                }
+               return 1;
             }
 
-            // additional checks for DXVK and Injector
-            if (config.IsDXVK && config.Injector && d3d9IsDXVK)
-            {
-                auto versionStrings = GetFileVersionStrings(L"d3d9.dll");
-                if (versionStrings.find(L"ProductName") != versionStrings.end() && versionStrings[L"ProductName"] == L"DXVK")
-                {
-                    struct FileCheck
-                    {
-                        std::wstring fileName;
-                        std::wstring binFileName;
-                    };
-
-                    FileCheck filesToCheck[] =
-                    {
-                        {L"DivxDecoder.dll", L"DivxDecoder.bin"},
-                        {L"DivxMediaLib.dll", L"DivxMediaLib.bin"}
-                    };
-
-                    for (const auto& file : filesToCheck)
-                    {
-                        std::wstring filePath = file.fileName;
-                        std::wstring binFilePath = baseLauncherName + L"_" + file.binFileName;
-                        std::string currentMD5, expectedMD5;
-                        if (GetFileAttributes(filePath.c_str()) != INVALID_FILE_ATTRIBUTES)
-                        {
-                            // calculate the expected MD5 checksum from the .bin file
-                            if (CalculateMD5(binFilePath.c_str(), expectedMD5))
-                            {
-                                // calculate the current MD5 checksum from the .dll file
-                                if (CalculateMD5(filePath.c_str(), currentMD5) && currentMD5 != expectedMD5)
-                                {
-                                    if (!CopyFileRaw(binFilePath.c_str(), file.fileName.c_str()))
-                                    {
-                                        std::wstringstream errorMessage;
-                                        errorMessage << L"Failed to create or replace the " << file.fileName << L" file with the correct version that is required in order to allow movies to play correctly with the DXVK and injector combination. The " << binFilePath << L" file may be missing. Reacquire it from the mod package, or try again.";
-                                        MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                                        return 1;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                std::wstringstream errorMessage;
-                                errorMessage << L"Failed to calculate the MD5 checksum of the " << binFilePath << L" file in order to validate the necessary DIVX files for the injector and DXVK combination. The file may be missing. Reacquire it from the mod package, or try again.";
-                                MessageBox(NULL, errorMessage.str().c_str(), L"Error", MB_OK | MB_ICONERROR);
-                                return 1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (config.VerboseDebug && config.IsDXVK)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified DXVK.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
@@ -1573,7 +1558,7 @@ int main()
                 }
             }
 
-            if (config.VerboseDebug && config.LAAPatch)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified large address aware.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
@@ -1639,7 +1624,7 @@ int main()
                 CheckGameConfiguration(config);
             }
 
-            if (config.VerboseDebug && config.UIWarnings)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified game configuration.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
@@ -1659,10 +1644,6 @@ int main()
                     return 1;
                 }
 
-                if (config.VerboseDebug && config.Injector) {
-                    MessageBox(NULL, L"Verified injector config.", L"Debug", MB_OK | MB_ICONINFORMATION);
-                }
-
                 // read mod-folder from the .config file
                 std::wstring configFilePath = rootDir + L"\\" + configFileName;
                 std::wstring modFolder = ReadModFolderFromConfig(configFilePath);
@@ -1673,17 +1654,9 @@ int main()
                     return 1; // error message is handled in InjectedFilesPresent
                 }
 
-                if (config.VerboseDebug && config.Injector) {
-                    MessageBox(NULL, L"Verified injected files.", L"Debug", MB_OK | MB_ICONINFORMATION);
-                }
-
                 if (!InjectedConfigurationsPresent(modName, config.InjectedConfigurations))
                 {
                     return 1; // error message is handled in InjectedConfigurationsPresent
-                }
-
-                if (config.VerboseDebug && config.Injector) {
-                    MessageBox(NULL, L"Verified injected configurations.", L"Debug", MB_OK | MB_ICONINFORMATION);
                 }
 
                 if (GetFileAttributes(config.InjectorFileName.c_str()) == INVALID_FILE_ATTRIBUTES)
@@ -1704,7 +1677,7 @@ int main()
                 }
             }
 
-            if (config.VerboseDebug && config.Injector)
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified injector.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
@@ -1719,14 +1692,9 @@ int main()
                 return 1;
             }
 
-            if (config.VerboseDebug && !config.AdditionalFiles.empty())
+            if (config.VerboseDebug)
             {
                 MessageBox(NULL, L"Verified additional files.", L"Debug", MB_OK | MB_ICONINFORMATION);
-            }
-
-            if (config.Injector && !config.AdditionalFiles.empty())
-            {
-                CONSOLE_MESSAGE(L"Additional files check.");
             }
 
             // check if the .module file exists in the same directory
@@ -1736,11 +1704,6 @@ int main()
                 return 1;
             }
 
-            if (config.VerboseDebug)
-            {
-                MessageBox(NULL, L"Found module file.", L"Debug", MB_OK | MB_ICONINFORMATION);
-            }
-
             if (!CheckModuleFile(moduleFileName, config))
             {
                 return 1;
@@ -1748,7 +1711,7 @@ int main()
 
             if (config.VerboseDebug)
             {
-                MessageBox(NULL, L"Verified module contents.", L"Debug", MB_OK | MB_ICONINFORMATION);
+                MessageBox(NULL, L"Verified module.", L"Debug", MB_OK | MB_ICONINFORMATION);
             }
 
             CONSOLE_MESSAGE(L"Module check.");
