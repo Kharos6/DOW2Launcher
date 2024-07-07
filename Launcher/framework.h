@@ -70,14 +70,30 @@ namespace fs = boost::filesystem;
 
 
 // function to display a bitmap while launching
-HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bitmapWidth, int bitmapHeight)
+HWND ShowBitmap(HINSTANCE hInstance, const std::wstring & bitmapFileName)
 {
+    // load the bitmap from the file
+    HBITMAP hBitmap = (HBITMAP)LoadImage(NULL, bitmapFileName.c_str(), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+    if (!hBitmap)
+    {
+        return NULL;
+    }
+
+    // retrieve the bitmap's dimensions
+    BITMAP bitmap;
+    GetObject(hBitmap, sizeof(BITMAP), &bitmap);
+    int bitmapWidth = bitmap.bmWidth;
+    int bitmapHeight = bitmap.bmHeight;
+
+    // get the screen dimensions
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
     int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
+    // calculate the position to center the bitmap on the screen
     int xPos = (screenWidth - bitmapWidth) / 2;
     int yPos = (screenHeight - bitmapHeight) / 2;
 
+    // create the window to display the bitmap
     HWND hwnd = CreateWindowEx(
         0,
         L"STATIC",
@@ -86,21 +102,17 @@ HWND ShowBitmap(HINSTANCE hInstance, const std::wstring& bitmapFileName, int bit
         xPos, yPos,
         bitmapWidth, bitmapHeight,
         NULL, NULL, hInstance, NULL);
-
     if (!hwnd)
     {
+        // clean up the bitmap if window creation fails
+        DeleteObject(hBitmap);
         return NULL;
     }
 
-    HBITMAP hBitmap = (HBITMAP)LoadImage(NULL, bitmapFileName.c_str(), IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-    if (!hBitmap)
-    {
-        DestroyWindow(hwnd); // ensure the window is destroyed if bitmap loading fails
-        return NULL;
-    }
-
+    // set the bitmap to the window
     SendMessage(hwnd, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hBitmap);
 
+    // show and update the window
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
 
