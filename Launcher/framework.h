@@ -3,6 +3,7 @@
 #pragma once
 #pragma comment(lib, "Version.lib")
 #pragma comment(lib, "vulkan-1.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 #define WIN32_LEAN_AND_MEAN
 #define BOOST_DISABLE_CURRENT_LOCATION
@@ -40,6 +41,7 @@
 #include <wincrypt.h>
 #include <shlobj.h>
 #include <psapi.h>
+#include <gdiplus.h>
 
 // boost headers
 #include <boost/process.hpp>
@@ -53,6 +55,8 @@
 
 // local headers
 #include "vulkan/vulkan.h"
+
+using namespace Gdiplus;
 
 namespace bp = boost::process;
 namespace fs = boost::filesystem;
@@ -117,6 +121,185 @@ HWND ShowBitmap(HINSTANCE hInstance, const std::wstring & bitmapFileName)
     UpdateWindow(hwnd);
 
     return hwnd;
+}
+
+// thread function to run the bitmap display
+void BitmapThread(HINSTANCE hInstance, const std::wstring& bitmapFileName)
+{
+    HWND hwnd = ShowBitmap(hInstance, bitmapFileName);
+
+    if (hwnd != NULL)
+    {
+        // run a message loop for the bitmap window
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+}
+
+// global variable for GDI+ token
+ULONG_PTR gdiplusToken;
+
+// function to initialize GDI+
+void InitializeGDIPlus() 
+{
+    GdiplusStartupInput gdiplusStartupInput;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+}
+
+// function to shutdown GDI+
+void ShutdownGDIPlus() 
+{
+    GdiplusShutdown(gdiplusToken);
+}
+
+// function to show the GIF splash screen
+HWND ShowGif(HINSTANCE hInstance, const std::wstring& gifFileName)
+{
+    HWND hwnd = NULL;
+    Image* image = new Image(gifFileName.c_str());
+    if (image->GetLastStatus() == Ok)
+    {
+        UINT width = image->GetWidth();
+        UINT height = image->GetHeight();
+
+        WNDCLASS wndclass = { 0 };
+        wndclass.lpfnWndProc = [](HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) -> LRESULT
+            {
+                static Image* image = reinterpret_cast<Image*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+                static int frameIndex = 0;
+                static UINT frameCount = 0;
+                static UINT* delays = nullptr;
+                static UINT_PTR timerID = 1;
+                static HDC hdcMem = nullptr;
+                static HBITMAP hbmMem = nullptr;
+                static HBITMAP hbmOld = nullptr;
+                static HDC hdcWindow = nullptr;
+
+                switch (message)
+                {
+                case WM_CREATE:
+                {
+                    CREATESTRUCT* cs = reinterpret_cast<CREATESTRUCT*>(lParam);
+                    image = reinterpret_cast<Image*>(cs->lpCreateParams);
+                    SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)image);
+
+                    GUID pageGuid = FrameDimensionTime;
+                    frameCount = image->GetFrameCount(&pageGuid);
+                    delays = new UINT[frameCount];
+                    PropertyItem* propItem = new PropertyItem[frameCount];
+                    int size = image->GetPropertyItemSize(PropertyTagFrameDelay);
+                    image->GetPropertyItem(PropertyTagFrameDelay, size, propItem);
+                    memcpy(delays, propItem->value, frameCount * sizeof(UINT));
+                    delete[] propItem;
+                    SetTimer(hwnd, timerID, delays[frameIndex] * 10, NULL);
+
+                    hdcWindow = GetDC(hwnd);
+                    hdcMem = CreateCompatibleDC(hdcWindow);
+                    hbmMem = CreateCompatibleBitmap(hdcWindow, image->GetWidth(), image->GetHeight());
+                    hbmOld = (HBITMAP)SelectObject(hdcMem, hbmMem);
+                }
+                break;
+
+                case WM_TIMER:
+                    if (wParam == timerID)
+                    {
+                        frameIndex = (frameIndex + 1) % frameCount;
+                        image->SelectActiveFrame(&FrameDimensionTime, frameIndex);
+                        InvalidateRect(hwnd, NULL, FALSE);
+                        SetTimer(hwnd, timerID, delays[frameIndex] * 10, NULL);
+                    }
+                    break;
+
+                case WM_PAINT:
+                {
+                    PAINTSTRUCT ps;
+                    HDC hdc = BeginPaint(hwnd, &ps);
+                    Graphics graphics(hdcMem);
+                    graphics.Clear(Color(0, 0, 0, 0));
+                    graphics.DrawImage(image, 0, 0, image->GetWidth(), image->GetHeight());
+
+                    BLENDFUNCTION blendFunction;
+                    blendFunction.BlendOp = AC_SRC_OVER;
+                    blendFunction.BlendFlags = 0;
+                    blendFunction.SourceConstantAlpha = 255;
+                    blendFunction.AlphaFormat = AC_SRC_ALPHA;
+
+                    AlphaBlend(hdc, 0, 0, image->GetWidth(), image->GetHeight(), hdcMem, 0, 0, image->GetWidth(), image->GetHeight(), blendFunction);
+                    EndPaint(hwnd, &ps);
+                }
+                break;
+
+                case WM_DESTROY:
+                    KillTimer(hwnd, timerID);
+                    delete[] delays;
+
+                    SelectObject(hdcMem, hbmOld);
+                    DeleteObject(hbmMem);
+                    DeleteDC(hdcMem);
+                    ReleaseDC(hwnd, hdcWindow);
+
+                    PostQuitMessage(0);
+                    break;
+
+                default:
+                    return DefWindowProc(hwnd, message, wParam, lParam);
+                }
+                return 0;
+            };
+
+        wndclass.hInstance = hInstance;
+        wndclass.hbrBackground = (HBRUSH)GetStockObject(WHITE_BRUSH);
+        wndclass.lpszClassName = L"GifSplashScreen";
+
+        RegisterClass(&wndclass);
+
+        hwnd = CreateWindowEx(
+            WS_EX_LAYERED,
+            L"GifSplashScreen",
+            NULL,
+            WS_VISIBLE | WS_POPUP | SS_BITMAP,
+            (GetSystemMetrics(SM_CXSCREEN) - width) / 2,
+            (GetSystemMetrics(SM_CYSCREEN) - height) / 2,
+            width,
+            height,
+            NULL,
+            NULL,
+            hInstance,
+            image
+        );
+
+        SetLayeredWindowAttributes(hwnd, RGB(255, 255, 255), 0, LWA_COLORKEY);
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+
+        return hwnd;
+    }
+    else
+    {
+        delete image;
+        return NULL;
+    }
+}
+
+// thread function to run the gif splash screen
+void GifThread(HINSTANCE hInstance, const std::wstring& bitmapFileName)
+{
+    HWND hwnd = ShowGif(hInstance, bitmapFileName);
+
+    if (hwnd != NULL)
+    {
+        // run a message loop for the bitmap window
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
 }
 
 // function to get the command line of a process
