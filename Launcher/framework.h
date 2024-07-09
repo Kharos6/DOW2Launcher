@@ -1,9 +1,6 @@
 // header for storing generic functions, not including functions specific to the game or its files
 
 #pragma once
-#pragma comment(lib, "Version.lib")
-#pragma comment(lib, "vulkan-1.lib")
-#pragma comment(lib, "gdiplus.lib")
 
 #define WIN32_LEAN_AND_MEAN
 #define BOOST_DISABLE_CURRENT_LOCATION
@@ -1049,6 +1046,129 @@ bool RemoveWin7RtmCompatibilityMode(const std::wstring& exePath)
     return true;
 }
 
+bool CheckWindowsCRLF(const std::wstring& fileName)
+{
+    // read the entire file content into a string
+    std::ifstream file(fileName, std::ios::binary);
+    if (!file.is_open())
+    {
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    file.close();
+
+    std::string content = buffer.str();
+
+    // check the content to ensure it's in CRLF format
+    for (size_t i = 0; i < content.size(); ++i)
+    {
+        if (content[i] == '\n' && (i == 0 || content[i - 1] != '\r'))
+        {
+            return false; // found LF without preceding CR, file is not in CRLF format
+        }
+    }
+
+    return true;
+}
+
+typedef VkResult(VKAPI_PTR* PFN_vkCreateInstance)(const VkInstanceCreateInfo*, const VkAllocationCallbacks*, VkInstance*);
+typedef void (VKAPI_PTR* PFN_vkDestroyInstance)(VkInstance, const VkAllocationCallbacks*);
+typedef VkResult(VKAPI_PTR* PFN_vkEnumeratePhysicalDevices)(VkInstance, uint32_t*, VkPhysicalDevice*);
+typedef void (VKAPI_PTR* PFN_vkGetPhysicalDeviceProperties)(VkPhysicalDevice, VkPhysicalDeviceProperties*);
+
+HMODULE LoadVulkanLibrary()
+{
+    return LoadLibrary(L"vulkan-1.dll");
+}
+
+void UnloadVulkanLibrary(HMODULE vulkanLib)
+{
+    if (vulkanLib)
+    {
+        FreeLibrary(vulkanLib);
+    }
+}
+
+PFN_vkCreateInstance GetVkCreateInstanceFunction(HMODULE vulkanLib)
+{
+    return (PFN_vkCreateInstance)GetProcAddress(vulkanLib, "vkCreateInstance");
+}
+
+PFN_vkDestroyInstance GetVkDestroyInstanceFunction(HMODULE vulkanLib)
+{
+    return (PFN_vkDestroyInstance)GetProcAddress(vulkanLib, "vkDestroyInstance");
+}
+
+PFN_vkEnumeratePhysicalDevices GetVkEnumeratePhysicalDevicesFunction(HMODULE vulkanLib)
+{
+    return (PFN_vkEnumeratePhysicalDevices)GetProcAddress(vulkanLib, "vkEnumeratePhysicalDevices");
+}
+
+PFN_vkGetPhysicalDeviceProperties GetVkGetPhysicalDevicePropertiesFunction(HMODULE vulkanLib)
+{
+    return (PFN_vkGetPhysicalDeviceProperties)GetProcAddress(vulkanLib, "vkGetPhysicalDeviceProperties");
+}
+
+// function to check for GPU vulkan support
+bool HasVulkanSupport()
+{
+    // load Vulkan library
+    HMODULE vulkanLib = LoadVulkanLibrary();
+    if (!vulkanLib)
+    {
+        return false;
+    }
+
+    // get function pointers
+    PFN_vkCreateInstance vkCreateInstance = GetVkCreateInstanceFunction(vulkanLib);
+    PFN_vkDestroyInstance vkDestroyInstance = GetVkDestroyInstanceFunction(vulkanLib);
+    PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices = GetVkEnumeratePhysicalDevicesFunction(vulkanLib);
+    PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties = GetVkGetPhysicalDevicePropertiesFunction(vulkanLib);
+
+    if (!vkCreateInstance || !vkDestroyInstance || !vkEnumeratePhysicalDevices || !vkGetPhysicalDeviceProperties)
+    {
+        UnloadVulkanLibrary(vulkanLib);
+        return false;
+    }
+
+    // initialize Vulkan
+    VkInstance instance;
+    VkApplicationInfo appInfo = {};
+    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    appInfo.pApplicationName = "VulkanCheck";
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.pEngineName = "No Engine";
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_0;
+
+    VkInstanceCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    createInfo.pApplicationInfo = &appInfo;
+
+    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS)
+    {
+        UnloadVulkanLibrary(vulkanLib);
+        return false;
+    }
+
+    // check for Vulkan-compatible devices
+    uint32_t deviceCount = 0;
+    if (vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr) != VK_SUCCESS || deviceCount == 0)
+    {
+        vkDestroyInstance(instance, nullptr);
+        UnloadVulkanLibrary(vulkanLib);
+        return false;
+    }
+
+    // clean up
+    vkDestroyInstance(instance, nullptr);
+    UnloadVulkanLibrary(vulkanLib);
+
+    return true;
+}
+
 
 
 //
@@ -1116,34 +1236,6 @@ bool is_process_running(const std::string& process_name)
 bool FileExists(const std::string& path) 
 {
     return boost::filesystem::exists(path);
-}
-
-// function to check for GPU vulkan support
-bool HasVulkanSupport()
-{
-    VkInstance instance;
-    VkApplicationInfo appInfo = {};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "VulkanCheck";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
-
-    VkInstanceCreateInfo createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-    createInfo.pApplicationInfo = &appInfo;
-
-    if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) 
-    {
-        return false;
-    }
-
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-    vkDestroyInstance(instance, nullptr);
-
-    return deviceCount > 0;
 }
 
 // helper function to trim whitespace from a wide string

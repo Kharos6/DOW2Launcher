@@ -576,6 +576,12 @@ bool ProcessUCSFile(const std::wstring& filePath)
         return false;
     }
 
+    if (!CheckWindowsCRLF(filePath))
+    {
+        MessageBox(NULL, (L"The " + filePath + L" file does not match the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+        return false;
+    }
+
     // read entire file content into a string
     std::string fileContent((std::istreambuf_iterator<char>(ucsFile)), std::istreambuf_iterator<char>());
     ucsFile.close();
@@ -780,6 +786,12 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
     if (!moduleFile.is_open())
     {
         MessageBox(NULL, (L"Failed to find or open the mod's " + moduleFileName + L" module file. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+        return false;
+    }
+
+    if (!CheckWindowsCRLF(moduleFileName))
+    {
+        MessageBox(NULL, (L"This mod's " + moduleFileName + L" module file does not match the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         return false;
     }
 
@@ -1623,7 +1635,7 @@ int main(int argc, char* argv[])
             {
                 if (config.Warnings)
                 {
-                    MessageBox(NULL, L"No Vulkan capable GPU detected by the launcher, the game will likely not run with DXVK, which is required for this mod.", L"Warning", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
+                    MessageBox(NULL, L"No Vulkan capable GPU or Vulkan libraries detected by the launcher, the game may not run with DXVK, which is required for this mod.", L"Warning", MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST);
                 }
             }
 

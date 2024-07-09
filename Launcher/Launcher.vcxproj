@@ -147,12 +147,11 @@
 Gdi32.lib;
 Comdlg32.lib;
 Advapi32.lib
-;Shell32.lib;Version.lib;vulkan-1.lib;
-psapi.lib
+;Shell32.lib;Msimg32.lib;gdiplus.lib;psapi.lib
 ;ws2_32.lib;
 winmm.lib;
 secur32.lib;
-bcrypt.lib;gdiplus.lib;Msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+bcrypt.lib;Version.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
