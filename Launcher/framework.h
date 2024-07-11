@@ -1046,29 +1046,147 @@ bool RemoveWin7RtmCompatibilityMode(const std::wstring& exePath)
     return true;
 }
 
-bool CheckWindowsCRLF(const std::wstring& fileName)
+bool CheckAndConvertToWindowsCRLF(const std::wstring& fileName)
 {
-    // read the entire file content into a string
+    // read the BOM to determine the encoding
     std::ifstream file(fileName, std::ios::binary);
     if (!file.is_open())
     {
         return false;
     }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
+    // read entire file content into a string
+    std::string raw_content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     file.close();
 
-    std::string content = buffer.str();
+    // check and determine the encoding
+    std::wstring content;
+    if (raw_content.size() >= 2 && raw_content[0] == char(0xFF) && raw_content[1] == char(0xFE))
+    {
+        // UTF-16 LE
+        content = std::wstring(reinterpret_cast<const wchar_t*>(raw_content.data() + 2), (raw_content.size() - 2) / 2);
+    }
+    else if (raw_content.size() >= 2 && raw_content[0] == char(0xFE) && raw_content[1] == char(0xFF))
+    {
+        // UTF-16 BE
+        std::wstring utf16be_content(reinterpret_cast<const wchar_t*>(raw_content.data() + 2), (raw_content.size() - 2) / 2);
+        // swap bytes to convert from BE to LE
+        for (size_t i = 0; i < utf16be_content.size(); ++i)
+        {
+            wchar_t ch = utf16be_content[i];
+            utf16be_content[i] = (ch >> 8) | (ch << 8);
+        }
+        content = utf16be_content;
+    }
+    else if (raw_content.size() >= 3 && raw_content[0] == char(0xEF) && raw_content[1] == char(0xBB) && raw_content[2] == char(0xBF))
+    {
+        // UTF-8 with BOM
+        std::string utf8_content = raw_content.substr(3);
+        content = boost::locale::conv::utf_to_utf<wchar_t>(utf8_content);
+    }
+    else
+    {
+        // assume UTF-8 without BOM
+        content = boost::locale::conv::utf_to_utf<wchar_t>(raw_content);
+    }
 
-    // check the content to ensure it's in CRLF format
+    // check if conversion to CRLF is needed
+    bool needsConversion = false;
     for (size_t i = 0; i < content.size(); ++i)
     {
-        if (content[i] == '\n' && (i == 0 || content[i - 1] != '\r'))
+        if ((content[i] == L'\n' && (i == 0 || content[i - 1] != L'\r')) || content[i] == L'\r')
         {
-            return false; // found LF without preceding CR, file is not in CRLF format
+            if (content[i] == L'\r' && (i + 1 >= content.size() || content[i + 1] != L'\n'))
+            {
+                // found CR without LF, needs conversion
+                needsConversion = true;
+                break;
+            }
+            if (content[i] == L'\n' && (i == 0 || content[i - 1] != L'\r'))
+            {
+                // found LF without preceding CR, needs conversion
+                needsConversion = true;
+                break;
+            }
         }
     }
+
+    if (!needsConversion)
+    {
+        return true; // file is already in CRLF format
+    }
+
+    // convert content to CRLF format
+    std::wstring convertedContent;
+    for (size_t i = 0; i < content.size(); ++i)
+    {
+        if (content[i] == L'\r')
+        {
+            if (i + 1 < content.size() && content[i + 1] == L'\n')
+            {
+                // handle already existing CRLF
+                convertedContent += L"\r\n";
+                ++i; // Skip the '\n'
+            }
+            else
+            {
+                // handle Macintosh CR
+                convertedContent += L"\r\n";
+            }
+        }
+        else if (content[i] == L'\n')
+        {
+            if (i == 0 || content[i - 1] != L'\r')
+            {
+                // handle LF not preceded by CR (Unix LF)
+                convertedContent += L"\r\n";
+            }
+        }
+        else
+        {
+            convertedContent += content[i];
+        }
+    }
+
+    // write the converted content back to the file
+    std::wofstream outFile(fileName, std::ios::binary | std::ios::trunc);
+    if (!outFile.is_open())
+    {
+        return false;
+    }
+
+    if (raw_content.size() >= 2 && raw_content[0] == char(0xFF) && raw_content[1] == char(0xFE))
+    {
+        // UTF-16 LE
+        outFile.imbue(std::locale(outFile.getloc(), new std::codecvt_utf16<wchar_t, 0x10FFFF, std::little_endian>));
+        outFile.write(L"\uFEFF", 1); // write BOM
+    }
+    else if (raw_content.size() >= 2 && raw_content[0] == char(0xFE) && raw_content[1] == char(0xFF))
+    {
+        // UTF-16 BE
+        outFile.imbue(std::locale(outFile.getloc(), new std::codecvt_utf16<wchar_t, 0x10FFFF, std::consume_header>));
+        outFile.write(L"\uFEFF", 1); // write BOM
+        for (size_t i = 0; i < convertedContent.size(); ++i)
+        {
+            wchar_t ch = convertedContent[i];
+            wchar_t be_ch = (ch >> 8) | (ch << 8);
+            outFile.write(&be_ch, 1);
+        }
+        outFile.close();
+        return true;
+    }
+    else
+    {
+        // UTF-8
+        outFile.imbue(std::locale(outFile.getloc(), new std::codecvt_utf8<wchar_t>));
+        if (raw_content.size() >= 3 && raw_content[0] == char(0xEF) && raw_content[1] == char(0xBB) && raw_content[2] == char(0xBF))
+        {
+            outFile << L'\uFEFF'; // write BOM if it was present in the original file
+        }
+    }
+
+    outFile.write(convertedContent.c_str(), convertedContent.size());
+    outFile.close();
 
     return true;
 }

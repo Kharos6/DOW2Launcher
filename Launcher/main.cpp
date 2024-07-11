@@ -576,9 +576,9 @@ bool ProcessUCSFile(const std::wstring& filePath)
         return false;
     }
 
-    if (!CheckWindowsCRLF(filePath))
+    if (!CheckAndConvertToWindowsCRLF(filePath))
     {
-        MessageBox(NULL, (L"The " + filePath + L" file does not match the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+        MessageBox(NULL, (L"Failed to verify or convert the " + filePath + L" file to the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         return false;
     }
 
@@ -789,9 +789,9 @@ bool CheckModuleFile(const std::wstring& moduleFileName, const LaunchConfig& con
         return false;
     }
 
-    if (!CheckWindowsCRLF(moduleFileName))
+    if (!CheckAndConvertToWindowsCRLF(moduleFileName))
     {
-        MessageBox(NULL, (L"This mod's " + moduleFileName + L" module file does not match the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
+        MessageBox(NULL, (L"Failed to verify or convert the " + moduleFileName + L" file to the required Windows (CRLF) format. Reacquire it from the mod package, or try again.").c_str(), L"Error", MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
         return false;
     }
 
